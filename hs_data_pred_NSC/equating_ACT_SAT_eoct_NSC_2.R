@@ -5,7 +5,7 @@
 ##    give students an 80% chance of enrolling in college, and 2-year persistence in college
 
 #   created on    2014.03.21 by James Appleton
-#   last updated   2014.01.06 by James Appleton
+#   last updated  2015.01.06 by James Appleton
 
 require(ggplot2)
 require(grid)
