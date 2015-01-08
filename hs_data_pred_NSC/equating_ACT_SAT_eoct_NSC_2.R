@@ -5,7 +5,7 @@
 ##    give students an 80% chance of enrolling in college, and 2-year persistence in college
 
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.01.06 by James Appleton
+#   last updated  2015.01.08 by James Appleton
 
 require(ggplot2)
 require(grid)
@@ -309,7 +309,7 @@ rm(df, df2, list = ls(pattern = "gpa."))
 								    SUBJECT in ('MA', 'VE')
         "))
     
-    close(ma_ch)
+
     sat <- case.cols("sat")
 
     # filter down to average scale score by kid
@@ -324,6 +324,25 @@ rm(df, df2, list = ls(pattern = "gpa."))
         # restructure
         sat <- dcast(sat, stunumb ~ subject)
 
+########################
+# linking file for GTID
+########################
+
+    id <- sqlQuery(ma_ch, paste0(
+      
+    "      SELECT [STUDENT_ID]
+                ,[PERMNUM]
+            FROM [GSDR].[GEMS].[SDRC_HIST]
+    "))
+
+    id <- case.cols("id")
+      colnames(id) <- c("gtid", "id")
+    
+    # keep only one set of these // only 2 dups - better vetting method?
+    id <- id[!duplicated(id$gtid), ]
+
+    close(ma_ch)
+
 ###########################
 # load the graduation data
 ###########################
@@ -332,9 +351,6 @@ for (i in 2:3) {
 
 fileLoc <- paste0(path,
                   "\\RBES\\Graduation Rate\\Cohort Graduation Rate Data\\ClassOfSY", cohortYear_shrt[i])
-
-
-
 
 df <- read.csv(paste0("..\\RaisngAchClsngGap\\data\\prep\\DOECohortData_", startYear[i],  
                         "_jja.csv"), sep = ",", header = TRUE)
@@ -345,180 +361,28 @@ df <- case.cols("df")
   df <- df[df$grad.rate.type == 4 & df$school.id == "ALL" & 
               df$update.diploma.type %in% c("G", "C", "B", "V"), ]
 
+  df <- merge(df, id, by.x = "student.id", by.y = "gtid", all.x = TRUE)
 
+assign(paste0("grads.", cohortYear_shrt[i]), df)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-df <- merge(df, econECT, by.x = "id", by.y = "STUNUMB", all.x = TRUE)
-
-# remove NAs
-a.e <- as.data.frame(df[complete.cases(df[, c(2, 4, 8, 11:13)]), c(2, 4, 8, 11:13)])
-  colnames(a.e) <- c("loc", "ELA.GPA", "eng.ACT", "school", "gr11", "econSS")
-a.m <- as.data.frame(df[complete.cases(df[, c(2, 5, 9, 11:13)]), c(2, 5, 9, 11:13)])
-  colnames(a.m) <- c("loc", "math.GPA", "math.ACT", "school", "gr11", "econSS")
-a.r <- as.data.frame(df[complete.cases(df[, c(2, 4, 10, 11:13)]), c(2, 4, 10, 11:13)])
-  colnames(a.r) <- c("loc", "ELA.GPA", "rdg.ACT", "school", "gr11", "econSS")
-s.m <- as.data.frame(df[complete.cases(df[, c(2, 5, 6, 11:13)]), c(2, 5, 6, 11:13)])
-  colnames(s.m) <- c("loc", "math.GPA", "math.SAT", "school", "gr11", "econSS")
-s.v <- as.data.frame(df[complete.cases(df[, c(2, 4, 7, 11:13)]), c(2, 4, 7, 11:13)])
-  colnames(s.v) <- c("loc", "ELA.GPA", "verbal.SAT", "school", "gr11", "econSS")
-
-
-q.titles <- c("Mathematics: GPA and ACT\n(r = ",
-              "E/LA: GPA and ACT\n(r = ",
-              "E/LA GPA and Reading ACT\n(r = ",
-              "Mathematics: GPA and SAT\n(r = ",
-              "E/LA GPA and SAT Verbal\n(r = ")
-
-q.objects <- cbind(c("aMath", "aEng", "aRD", "sMath", "sVerb"),
-                   c("a.m", "a.e", "a.r", "s.m", "s.v"))
-
-q.labels <- cbind(c("Mathematics GPA", 
-                    "English/Language Arts GPA",
-                    "English/Language Arts GPA",
-                    "Mathematics GPA", 
-                    "English/Language Arts GPA"), 
-                  c("Mathematics ACT Score",
-                    "English ACT Score", 
-                    "Reading ACT Score",
-                    "Mathematics SAT Score", 
-                    "Verbal SAT Score"))
-
-
-
-q <- cbind(q.titles, q.objects, q.labels)
-
-    rm(q.titles, q.objects, q.labels)
-
-######################################*
-
-  schlTstGPA <- as.data.frame(matrix(rep(NA, 7), nrow = 1))
-    colnames(schlTstGPA) <- c("N", "perc.11th", "prior.perf", "school", "test", "gpa", "r")
-  
-    df[, 11] <- lapply(df[, 11], as.character)
-  
-  modelGPA <- function(x, y) {  # y is location code
-    model <- lm(x[, 3] ~ x[, 6], na.action = "na.omit", x)
-    gpa <- round((line-summary(model)$coefficients[1, 1])/
-                 summary(model)$coefficients[2, 1], 0)
-    r <- round(cor(x[, 3], x[, 6]), 2)
-    #assign(paste0("gpa.", q[i, 2], ".", y), gpa, envir = .GlobalEnv)
-      newDF <- rbind(schlTstGPA, c(length(model$residuals), 
-                                   round(length(model$residuals)/mean(x[, 5])*100, 1), 
-                                   median(x[, 6]), paste0(unique(x[, 4])), q[i, 2], get("gpa"), 
-                                   get("r")))
-    assign("schlTstGPA", newDF, envir = .GlobalEnv)   
-  }
-
-  schls <- unique(df[, 2])
-
-for (i in 1:5) {
-  assign("df1", get(paste(q[i, 3], sep = "")))
-  
-  if (i %in% (4:5)) {
-    line <- 520
-  } else if (i == 3) {
-    line <- 18
-  } else {
-    line <- 22
-  }
-  
-  for (l in 1:length(schls)) {
-    
-    df2 <- df1[df1$loc == schls[l], ]
-    
-      if(length(complete.cases(df2)) >= 10) {
-    
-        modelGPA(df2, df2[1, 4])
-      }
-  }
 }
 
-schlTstGPA[, c(1:3, 6:7)] <- lapply(schlTstGPA[, c(1:3, 6:7)], as.numeric)
+
+################################
+# make dfs for graphs/modeling
+################################
 
 
-schlTstGPA <- schlTstGPA[schlTstGPA$N >= 20 & !is.na(schlTstGPA$N), ]
-schlTstGPA <- schlTstGPA[order(schlTstGPA$test, schlTstGPA$gpa), ]
 
-
-
-    write.table(schlTstGPA, 
-                file = paste0("..//student.success.factor//data//metadata//", 
-                              "equating//gpa_to_ACT_SAT_by_School.csv"), 
-                sep = ",", 
-                row.names = FALSE,
-                col.names = TRUE)
-
-
-###################################################################*
- schlTstECT <- as.data.frame(matrix(rep(NA, 6), nrow = 1))
-    colnames(schlTstECT) <- c("N", "perc.11th", "school", "test", "eoct", "r")
   
-  modelECT <- function(x, y) {  # y is location code
-    model <- lm(x[, 3] ~ x[, 6], na.action = "na.omit", x)
-    gpa <- round((line-summary(model)$coefficients[1, 1])/
-                 summary(model)$coefficients[2, 1], 0)
-    r <- round(cor(x[, 3], x[, 6]), 2)
-    #assign(paste0("gpa.", q[i, 2], ".", y), gpa, envir = .GlobalEnv)
-      newDF <- rbind(schlTstECT, c(length(model$residuals), 
-                                   round(length(model$residuals)/mean(x[, 5])*100, 1), 
-                                   paste0(unique(x[, 4])), q[i, 2], get("gpa"), 
-                                   get("r")))
-    assign("schlTstECT", newDF, envir = .GlobalEnv)   
-  }
-
-  schls <- unique(df[, 2])
-
-for (i in 1:5) {
-  assign("df1", get(paste(q[i, 3], sep = "")))
-  
-  if (i %in% (4:5)) {
-    line <- 520
-  } else if (i == 2) {
-    line <- 18
-  } else {
-    line <- 22
-  }
-  
-  for (l in 1:length(schls)) {
-    
-    df2 <- df1[df1$loc == schls[l], ]
-    
-      if(length(complete.cases(df2)) >= 10) {
-    
-        modelECT(df2, df2[1, 4])
-      }
-  }
-}
-
-schlTstECT[, c(1:2, 5:6)] <- lapply(schlTstECT[, c(1:2, 5:6)], as.numeric)
-
-
-schlTstECT <- schlTstECT[schlTstECT$N >= 20 & !is.na(schlTstECT$N), ]
-schlTstECT <- schlTstECT[order(schlTstECT$test, schlTstECT$eoct), ]
 
 
 
-    write.table(schlTstECT, 
-                file = paste0("..//student.success.factor//data//metadata//", 
-                              "equating//eoct_to_ACT_SAT_by_School.csv"), 
-                sep = ",", 
-                row.names = FALSE,
-                col.names = TRUE)
+
+
+
+
+
 
 
 
