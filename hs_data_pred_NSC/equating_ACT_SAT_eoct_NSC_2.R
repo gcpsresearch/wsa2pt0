@@ -13,6 +13,7 @@ require(RODBC)
 require(plyr)
 require(foreign)
 require(reshape2)
+require(catspec)
 
 rm(list=ls())
 path <- readLines("c:\\current_path.txt")
@@ -24,7 +25,7 @@ maindir <- paste(path,
              "\\Research Projects\\RaisngAchClsngGap",sep="")
 dir ()
 
-# function
+# functions
 vplayout <- function(x, y) {
   viewport(layout.pos.row = x, layout.pos.col = y)
 }
@@ -40,6 +41,21 @@ case.cols <- function(x) {
   x.df <- get(x)
   colnames(x.df) <- tolower(names(x.df))
   assign(x,x.df, env = .GlobalEnv)
+}
+
+# write a simple function to add footnote
+makeFootnote <- function(footnoteText =
+                         format(Sys.time(), "%d %b %Y"),
+                         size = .7, color = grey(.5))
+{
+  require(grid)
+  pushViewport(viewport())
+  grid.text(label = footnoteText ,
+    x = unit(1,"npc") - unit(2, "mm"),
+    y = unit(2, "mm"),
+    just = c("right", "bottom"),
+    gp = gpar(cex = size, col = color))
+ popViewport()
 }
 
 # set years for graduation data
@@ -190,6 +206,8 @@ for (i in 1:yrs) {
         actStu$actSS <- round(actStu$actSS)
           stopifnot(actStu$actSS >= 1 & actStu$actSS <= 36)
 
+    actStu <- dcast(actStu, id ~ subject)
+
 
 ##################################
 ## get EOCT econ data
@@ -324,6 +342,9 @@ rm(df, df2, list = ls(pattern = "gpa."))
         # restructure
         sat <- dcast(sat, stunumb ~ subject)
 
+        sat <- case.cols("sat")
+          colnames(sat)[2:3] <- trim(names(sat)[2:3])
+
 ########################
 # linking file for GTID
 ########################
@@ -358,8 +379,8 @@ df <- read.csv(paste0("..\\RaisngAchClsngGap\\data\\prep\\DOECohortData_", start
 df <- case.cols("df")
   names(df)[40] <- "update.diploma.type"
 
-  df <- df[df$grad.rate.type == 4 & df$school.id == "ALL" & 
-              df$update.diploma.type %in% c("G", "C", "B", "V"), ]
+      df <- df[df$grad.rate.type == 4 & df$school.id == "ALL", ]
+      df$grads <- df$update.diploma.type %in% c("G", "C", "B", "V")
 
   df <- merge(df, id, by.x = "student.id", by.y = "gtid", all.x = TRUE)
 
@@ -369,9 +390,118 @@ assign(paste0("grads.", cohortYear_shrt[i]), df)
 
 
 ################################
-# make dfs for graphs/modeling
+# make dfs and graph/model
 ################################
 
+grads.nsc11 <- merge(grads.2011, nsc, by.x = "id", by.y = "id")
+
+# ACT
+act.nsc <- merge(actStu, grads.nsc11, by.x = "id", by.y = "id")
+#     2010 2011 2012 //counts by year
+#     3258 3552 3830 
+
+t <- table(act.nsc$)
+
+
+pt <- ggplot(ddply(act.nsc2[, c("CO", "i.t")], "CO", summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t)), 
+             aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of On-Time Grads with Post-Secondary Outcome for this Predictor"))
+pt <- pt + xlab("ACT Composite Score")
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 10)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white")
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1.5, colour = "white", linetype = "dashed")
+print(pt)
+
+
+pt <- ggplot(ddply(act.nsc2[, c("MA", "i.t")], "MA", summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t)), 
+             aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of On-Time Grads with Post-Secondary Outcome for this Predictor"))
+pt <- pt + xlab("ACT Composite Score")
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 10)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white")
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+print(pt)
+
+
+makeFootnote("*scores of 1-12 in 12 bar and 32-36 in 36", color = "black")
+
+
+
+# v and x are predictor and nsc variables, respectively;
+  # y is predictor formal name; z is nsc formal name
+cumFreq <- function(v, x, y, z) {
+  t <- table(v, x)
+  p <- prop.table(t)
+  c <- cumsum(p)
+  return()
+  
+  
+  
+  
+  return(plot(round(c*100, 1), 
+              main = "Proportion with NSC Outcome for this Predictor:", 
+              sub = paste0(y, " and ", z),
+              ylab = paste0("% with ", z), 
+              xlab = paste0(y),
+              
+}
+
+act.nscF <- as.data.frame(lapply(act.nsc[, c("CO", "MA", "i.t", "p.e")], as.factor))
+
+
+cors.ita <- ddply(act.nsc[, c("cohort", "CO", "i.t")], "cohort", summarise, 
+              r = cor(CO, i.t))
+cors.pea <- ddply(act.nsc[, c("cohort", "CO", "p.e")], "cohort", summarise, 
+              r = cor(CO, p.e))
+
+act.it <- ggplot(act.nsc, aes(i.t, CO)) + geom_boxplot()
+act.it + geom_text(aes(label = round(CO, 1)))
+act.it
+act.pe <- ggplot(act.nsc, aes(p.e, CO)) + geom_boxplot()
+act.pe
+
+
+# SAT
+sat.nsc <- merge(sat, nsc, by.x = "stunumb", by.y = "id")
+#     2010 2011 2012 //counts by year 
+#      152 5072 6839
+
+sat.itm <- ggplot(sat.nsc, aes(i.t, ma)) + geom_boxplot()
+sat.itm
+sat.pem <- ggplot(sat.nsc, aes(p.e, ma)) + geom_boxplot()
+sat.pem
+
+sat.itv <- ggplot(sat.nsc, aes(i.t, ve)) + geom_boxplot()
+sat.itv
+sat.pev <- ggplot(sat.nsc, aes(p.e, ve)) + geom_boxplot()
+sat.pev
+
+
+# GPA
+gpa.nsc <- merge(gc12.aggf, nsc, by.x = "permnum", by.y = "id")
+#     2012 //counts by year 
+#     8238
+
+cors.itgm <- cor(gpa.nsc$sem1.gpa.ma, gpa.nsc$i.t, use = "pairwise.complete.obs")
+cors.pegm <- cor(gpa.nsc$sem1.gpa.ma, gpa.nsc$p.e, use = "pairwise.complete.obs")
+
+gpa.itm <- ggplot(gpa.nsc, aes(i.t, sem1.gpa.ma)) + geom_boxplot()
+gpa.itm
+gpa.pem <- ggplot(gpa.nsc, aes(p.e, sem1.gpa.ma)) + geom_boxplot()
+gpa.pem
+
+gpa.itv <- ggplot(gpa.nsc, aes(i.t, sem1.gpa.core)) + geom_boxplot()
+gpa.itv
+gpa.pev <- ggplot(gpa.nsc, aes(p.e, sem1.gpa.core)) + geom_boxplot()
+gpa.pev
 
 
   
