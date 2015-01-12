@@ -51,27 +51,27 @@ makeFootnote <- function(footnoteText =
   require(grid)
   pushViewport(viewport())
   grid.text(label = footnoteText ,
-    x = unit(1,"npc") - unit(2, "mm"),
-    y = unit(2, "mm"),
-    just = c("right", "bottom"),
+    x = unit(20,"mm"),
+    y = unit(1, "mm"),
+    just = c("left", "bottom"),
     gp = gpar(cex = size, col = color))
  popViewport()
 }
 
 # set years for graduation data
 
-cohortYear_shrt <- c(2010, 2011, 2012) # b/c 2013 doesn't have 4 semesters of time yet
+cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2013 doesn't have 4 semesters of time yet
 
 yrs <- length(cohortYear_shrt)  # number of years set below
-
-startYear1       <- "2006-07" # for 2011 grads
-startYear_shrt1  <- "2007"
 
 startYear2       <- "2007-08" # for 2011 grads
 startYear_shrt2  <- "2008"
 
 startYear3       <- "2008-09" # for 2012 grads
 startYear_shrt3  <- "2009"
+
+startYear1       <- "2009-10" # for 2011 grads
+startYear_shrt1  <- "2010"
 
 startYear <- c(startYear1, startYear2, startYear3)
 startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
@@ -115,8 +115,8 @@ for (i in 1:yrs) {
 
   nsc$i.t <- FALSE
   nsc$p.e1 <- FALSE
-  nsc$p.e2 <- FALSE
-  nsc$p.e3 <- FALSE
+#   nsc$p.e2 <- FALSE
+#   nsc$p.e3 <- FALSE
 
   
 
@@ -144,32 +144,38 @@ for (i in 1:yrs) {
                     nsc[nsc$p.e1 == FALSE, "cohort"] == cohortYear_shrt[i] & 
                     nsc[nsc$p.e1 == FALSE, "enrollment_status"] %in% c("F", "Q")
 
-    nsc[nsc$p.e2 == FALSE, "p.e2"] <- nsc[nsc$p.e2 == FALSE, "i.t"] == TRUE &     
-                    nsc[nsc$p.e2 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 1)*10000 + 1101 & 
-                    nsc[nsc$p.e2 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 1)*10000 + 915 & 
-                    nsc[nsc$p.e2 == FALSE, "cohort"] == cohortYear_shrt[i] & 
-                    nsc[nsc$p.e2 == FALSE, "enrollment_status"] %in% c("F", "Q")
- 
-    nsc[nsc$p.e3 == FALSE, "p.e3"] <- nsc[nsc$p.e3 == FALSE, "i.t"] == TRUE & 
-                    nsc[nsc$p.e3 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 2)*10000 + 501 & 
-                    nsc[nsc$p.e3 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 2)*10000 + 301 & 
-                    nsc[nsc$p.e3 == FALSE, "cohort"] == cohortYear_shrt[i] & 
-                    nsc[nsc$p.e3 == FALSE, "enrollment_status"] %in% c("F", "Q")
+# b/c p.e. now only 1 academic year
+
+#     nsc[nsc$p.e2 == FALSE, "p.e2"] <- nsc[nsc$p.e2 == FALSE, "i.t"] == TRUE &     
+#                     nsc[nsc$p.e2 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 1)*10000 + 1101 & 
+#                     nsc[nsc$p.e2 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 1)*10000 + 915 & 
+#                     nsc[nsc$p.e2 == FALSE, "cohort"] == cohortYear_shrt[i] & 
+#                     nsc[nsc$p.e2 == FALSE, "enrollment_status"] %in% c("F", "Q")
+#  
+#     nsc[nsc$p.e3 == FALSE, "p.e3"] <- nsc[nsc$p.e3 == FALSE, "i.t"] == TRUE & 
+#                     nsc[nsc$p.e3 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 2)*10000 + 501 & 
+#                     nsc[nsc$p.e3 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 2)*10000 + 301 & 
+#                     nsc[nsc$p.e3 == FALSE, "cohort"] == cohortYear_shrt[i] & 
+#                     nsc[nsc$p.e3 == FALSE, "enrollment_status"] %in% c("F", "Q")
 
   }
     
-      mrg <- ddply(nsc[, c("id", "p.e1", "p.e2", "p.e3", "i.t")], "id", summarise, 
+      mrg <- ddply(nsc[, c("id", "p.e1", 
+                           #"p.e2", "p.e3", 
+                           "i.t")], "id", summarise, 
                    pe1 = sum(p.e1), 
-                   pe2 = sum(p.e2), 
-                   pe3 = sum(p.e3), 
+#                    pe2 = sum(p.e2), 
+#                    pe3 = sum(p.e3), 
                    i.t = sum(i.t))
     
-        mrg$p.e <- mrg$pe1 == 1 & mrg$pe2 == 1 & mrg$pe3 == 1
+        mrg$p.e <- mrg$pe1 == 1 #& mrg$pe2 == 1 & mrg$pe3 == 1
     
         nsc <- merge(nsc, mrg[, c("id", "i.t", "p.e")], by.x = "id", by.y = "id", all.x = TRUE)
+                  colnames(nsc)[which(names(nsc) == "i.t.x")] <- "i.t"
 
-        nsc <- unique(nsc[, c(1, 3:5, 10, 25, 29, 31)])
-          colnames(nsc)[which(names(nsc) == "i.t.x")] <- "i.t"
+        nsc <- unique(nsc[, c("id", "first_name", "middle_name", "last_name", 
+                              "high_school_grad_date", "cohort", "i.t", "p.e")])
+
     
   nsc.model <- nsc[, c("id", "cohort", "i.t", "p.e")]
 
@@ -189,9 +195,9 @@ for (i in 1:yrs) {
                 ,[SUBJECT]
                 ,[SCALE_SCORE]
           FROM [Assessment].[dbo].[TEST_STU_ACT]
-          WHERE SCHOOL_YEAR >= 2008 and 
-		            SCHOOL_YEAR <= 2012 and
-                SCALE_SCORE is not null and
+          WHERE SCHOOL_YEAR >= ", cohortYear_shrt[1] - 3, " and ", 
+		            "SCHOOL_YEAR <= ", cohortYear_shrt[length(cohortYear_shrt)], " and ", 
+                "SCALE_SCORE is not null and
                 SCALE_SCORE != 0
         "))
 
@@ -200,9 +206,11 @@ for (i in 1:yrs) {
     
     # filter down to average scale score by kid
 
-    actStu <- ddply(act[, c(1, 5:6)], c("id", "subject"), summarise, 
+    actStu <- ddply(act[, c("id", "subject", "scale_score")], c("id", "subject"), 
+                    summarise, 
                      actSS = mean(scale_score))
-        stopifnot(anyDuplicated(actStu[, 1:2])==0)
+
+        stopifnot(anyDuplicated(actStu[, c("id", "subject")])==0)
         actStu$actSS <- round(actStu$actSS)
           stopifnot(actStu$actSS >= 1 & actStu$actSS <= 36)
 
@@ -223,18 +231,22 @@ for (i in 1:yrs) {
               ,[TOTAL_SCALE_SCORE]
           FROM [Assessment].[dbo].[TEST_STU_ECT]
           WHERE SUBJECT = 'ECO' and 
-                SCHOOL_YR in ('2010', '2011', '2012') and
-                TOTAL_SCALE_SCORE is not null and
+                SCHOOL_YR in (", paste(cohortYear_shrt, sep = "", collapse = ", "), 
+                ") and ", 
+                "TOTAL_SCALE_SCORE is not null and
                 TOTAL_SCALE_SCORE != 0
         "))
     
     #close(ma_ch)
 
+    econECT <- case.cols("econECT")
+
     # filter down to average scale score by kid
 
-    econECT <- ddply(econECT[, c(5, 7)], "STUNUMB", summarise, 
-                     econSS = mean(TOTAL_SCALE_SCORE))
-        stopifnot(anyDuplicated(econECT$STUNUMB)==0)
+    econECT <- ddply(econECT[, c("stunumb", "total_scale_score")], "stunumb", summarise, 
+                     econSS = mean(total_scale_score))
+
+        stopifnot(anyDuplicated(econECT$stunumb)==0)
         econECT$econSS <- round(econECT$econSS)
           stopifnot(econECT$econSS >= 200 & econECT$econSS <= 650)
 
@@ -408,50 +420,29 @@ pt <- ggplot(ddply(act.nsc2[, c("CO", "i.t")], "CO", summarise,
                    it_avg = mean(i.t)), 
              aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
-pt <- pt + ggtitle(paste0("Proportion of On-Time Grads with Post-Secondary Outcome for this Predictor"))
-pt <- pt + xlab("ACT Composite Score")
-pt <- pt + ylab("% with NSC Indicated Seamless Transition")
-pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 10)), limits = c(0, 100))
-pt <- pt + geom_text(vjust = 1, color = "white")
-pt <- pt + geom_hline(aes(yintercept = 80), size = 1.5, colour = "white", linetype = "dashed")
-print(pt)
-
-
-pt <- ggplot(ddply(act.nsc2[, c("MA", "i.t")], "MA", summarise, 
-                   N = length(i.t), 
-                   it_avg = mean(i.t)), 
-             aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
-pt <- pt + geom_bar(stat = "identity")
-pt <- pt + ggtitle(paste0("Proportion of On-Time Grads with Post-Secondary Outcome for this Predictor"))
-pt <- pt + xlab("ACT Composite Score")
+pt <- pt + ggtitle(paste0("Proportion of 2008-09 9th Grade Cohort with Seamless Post-Secondary Transition by ACT Score"))
+pt <- pt + xlab("ACT Composite Score\n\n\n")
 pt <- pt + ylab("% with NSC Indicated Seamless Transition")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 10)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white")
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + annotate("text", label = "*Due to small counts\nACT scores of 1-12 in bar 12\nand 32-36 in 32", 
+                    x = 2.5, y = 99, size = 3)
 print(pt)
+makeFootnote(paste0("*Sample is students in GCPS fall 2008 9th grade cohort.\n", 
+                    "Data sources are GCPS administrative records and\n", 
+                    "National Student Clearinghouse."), 
+             color = "grey60", size = .5)
 
 
-makeFootnote("*scores of 1-12 in 12 bar and 32-36 in 36", color = "black")
 
-
-
-# v and x are predictor and nsc variables, respectively;
-  # y is predictor formal name; z is nsc formal name
-cumFreq <- function(v, x, y, z) {
-  t <- table(v, x)
-  p <- prop.table(t)
-  c <- cumsum(p)
-  return()
-  
-  
-  
-  
-  return(plot(round(c*100, 1), 
-              main = "Proportion with NSC Outcome for this Predictor:", 
-              sub = paste0(y, " and ", z),
-              ylab = paste0("% with ", z), 
-              xlab = paste0(y),
-              
+# # v and x are predictor and nsc variables, respectively;
+#   # y is predictor formal name; z is nsc formal name
+# cumFreq <- function(v, x, y, z) {
+#   t <- table(v, x)
+#   p <- prop.table(t)
+#   c <- cumsum(p)
+#   return()            
 }
 
 act.nscF <- as.data.frame(lapply(act.nsc[, c("CO", "MA", "i.t", "p.e")], as.factor))
