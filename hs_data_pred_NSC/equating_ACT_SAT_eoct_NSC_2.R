@@ -1014,28 +1014,27 @@ names(t)[2] <- "Var1"
     t[t$Var1 <= low, dim(t)[2]] <- low
     t[t$Var1 >= high, dim(t)[2]] <- high
 
-  gpa.nsc.m <- merge(gpa.nsc.m, unique(t[, c("Var1", "value2")]), by.x = "value", by.y = "Var1", all.x = TRUE)
-  names(gpa.nsc.m)[6:7] <- c("Subject", "cumul.gpa")
+  sat.nsc.m <- merge(sat.nsc.m, unique(t[, c("Var1", "value2")]), by.x = "value", by.y = "Var1", all.x = TRUE)
+  names(sat.nsc.m)[6:7] <- c("Subject", "Score")
 
-  gpa.nsc.m2 <- ddply(gpa.nsc.m[, c("cohort2", "Subject", "cumul.gpa", "i.t")], c("cohort2", "Subject", "cumul.gpa"), 
+  sat.nsc.m2 <- ddply(sat.nsc.m[, c("cohort2", "Subject", "Score", "i.t")], c("cohort2", "Subject", "Score"), 
                    summarise, 
                    N = length(i.t), 
                    it_avg = mean(i.t))
 
-  gpa.nsc.m2.p <- ddply(gpa.nsc.m[, c("cohort2", "Subject", "cumul.gpa", "p.e")], c("cohort2", "Subject", "cumul.gpa"), 
+  sat.nsc.m2.p <- ddply(sat.nsc.m[, c("cohort2", "Subject", "Score", "p.e")], c("cohort2", "Subject", "Score"), 
                    summarise, 
                    N = length(p.e), 
                    pe_avg = mean(p.e))
   
     
     # check if every cell, once divided by cohort, is >= 30 cases
-    stopifnot(table(gpa.nsc.m$cohort, gpa.nsc.m$Subject, gpa.nsc.m$cumul.gpa) >= 30)
+    stopifnot(table(sat.nsc.m$cohort, sat.nsc.m$Subject, sat.nsc.m$Score) >= 30)
 
 # graph
 
-subj <- as.data.frame(matrix(cbind(c("cu.gpa.la",  "cu.gpa.ma", "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core"), 
-                                   c("LA Cumulative HSGPA", "MA Cumulative HSGPA", "SC Cumulative HSGPA", 
-                                     "SS Cumulative HSGPA", "Core Cumulative HSGPA")), 
+subj <- as.data.frame(matrix(cbind(c("ma",  "ve"), 
+                                   c("SAT Mathematics Scale Score", "SAT Critical Reading Scale Score")), 
                                    ncol = 2))
 subj <- apply(subj, 2, as.character)
 
@@ -1046,18 +1045,19 @@ subj <- apply(subj, 2, as.character)
 for (i in 1:length(subj[, 1])) {
   
   # create totals for footnote
-  N <- ddply(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), c("cohort2", "N")], "cohort2", summarise, 
+  N <- ddply(sat.nsc.m2[sat.nsc.m2$Subject == subj[i, 1] & !is.na(sat.nsc.m2$Score), c("cohort2", "N")], "cohort2", summarise, 
              N = sum(N))
   N$tot <- paste(N$cohort, " = ", N$N, sep = "", collapse = ", ")
   
 # create plot
-pt <- ggplot(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), ], 
-             aes(factor(cumul.gpa), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- ggplot(sat.nsc.m2[sat.nsc.m2$Subject == subj[i, 1] & !is.na(sat.nsc.m2$Score), ], 
+             aes(factor(Score), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ", 
                           subj[i, 2]))
 pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
 pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_x_discrete(breaks = c("350", "400", "450", "500", "550", "600", "650", "700", "750", "800"))
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
@@ -1067,21 +1067,21 @@ print(pt)
 #                     low, "\nand ", high, "-36 in ", high), 
 #                     x = 2.5, y = 99, size = 3)
 
-png(paste("../RaisngAchClsngGap/results/graphs/gpa_", 
-            subj[i, 1], "_to_NSC_imTrans_by_cohort.png", sep = ""), 
+png(paste("../RaisngAchClsngGap/results/graphs/sat_", 
+            subj[i, 1], "_to_nsc_imTrans_by_cohort.png", sep = ""), 
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with a cumulative HSGPA (", N$tot[1], ").\n", 
-                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
-                    " and ", high, "-110 in ", high,
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an SAT Score (", N$tot[1], ").\n", 
+                    "*Due to small counts, SAT Scores of 200-", low, " are in bar ", low, 
+                    " and ", high, "-800 in ", high,
                     "\nData sources are GCPS administrative records and ", 
                     "The National Student Clearinghouse.\n"), 
              color = "grey60", size = .5)
  
   dev.off()
-   assign(paste0(subj[i, 1], "gpa_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+   assign(paste0(subj[i, 1], "sat_to_nsc_imTrans"), pt, envir = .GlobalEnv)
 
 }
 
@@ -1092,17 +1092,18 @@ makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with a cu
 for (i in 1:length(subj[, 1])) {
   
    # create totals for footnote
-  N <- ddply(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), c("cohort2", "N")], "cohort2", summarise, 
+  N <- ddply(sat.nsc.m2[sat.nsc.m2$Subject == subj[i, 1] & !is.na(sat.nsc.m2$Score), c("cohort2", "N")], "cohort2", summarise, 
              N = sum(N))
   N$tot <- paste(N$cohort, " = ", N$N, sep = "", collapse = ", ")
 
-pt <- ggplot(gpa.nsc.m2.p[gpa.nsc.m2.p$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), ],
-             aes(factor(cumul.gpa), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- ggplot(sat.nsc.m2.p[sat.nsc.m2.p$Subject == subj[i, 1] & !is.na(sat.nsc.m2$Score), ],
+             aes(factor(Score), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
                           subj[i, 2]))
 pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
 pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_x_discrete(breaks = c("350", "400", "450", "500", "550", "600", "650", "700", "750", "800"))
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
@@ -1112,15 +1113,15 @@ print(pt)
 #                     low, "\nand ", high, "-36 in ", high), 
 #                     x = 2.5, y = 99, size = 3)
 
-png(paste("../RaisngAchClsngGap/results/graphs/gpa_", 
-            subj[i, 1], "_to_NSC_persist_by_cohort.png", sep = ""), 
+png(paste("../RaisngAchClsngGap/results/graphs/sat_", 
+            subj[i, 1], "_to_nsc_persist_by_cohort.png", sep = ""), 
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with cumulative HSGPA (", N$tot[1], ").\n", 
-                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
-                    " and ", high, "-110 in ", high,
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an SAT Score (", N$tot[1], ").\n", 
+                    "*Due to small counts, SAT Scores of 200-", low, " are in bar ", low, 
+                    " and ", high, "-800 in ", high,
                     "\nData sources are GCPS administrative records and ", 
                     "The National Student Clearinghouse.\n"), 
              color = "grey60", size = .5)
