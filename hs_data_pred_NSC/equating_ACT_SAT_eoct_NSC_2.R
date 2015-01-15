@@ -19,6 +19,7 @@ require(foreign)
 require(reshape2)
 require(catspec)
 
+
 # registerDoParallel(4, cores = 4)
 # getDoParWorkers()
 
@@ -184,7 +185,7 @@ for (i in 1:yrs) {
                               "high_school_grad_date", "cohort", "i.t", "p.e")])
 
     
-  nsc.model <- nsc[, c("id", "cohort", "i.t", "p.e")]
+  nsc.model <- nsc[, c("id", "i.t", "p.e")]
     
     
 
@@ -325,7 +326,7 @@ cohorts <- rbind(cohorts, get(paste0(cohort.list[i])))
 
 # have a few state errors to fix; we will keep best case (e.g., grad over non-grad)
                                   # after best case will take most recent
-if (anyDuplicated(cohorts$id) == 0) {
+if (anyDuplicated(cohorts$id) != 0) {
   
   cohorts <- cohorts[order(cohorts$id, -cohorts$grad, -cohorts$entry.school.year), ]
   
@@ -376,22 +377,33 @@ gpa <- df
 rm(df, df2, list = ls(pattern = "gpa."))
 
 #format GPA
-      
+
+      # merge in cohort year to know latest year of data to accept
+        # we will take that year down to 4 years prior
+          # expected grad year (cohort year), exp 11th (CY - 1), exp 10th (CY - 2), 
+          # exp 9th (CY - 3), exp 8th (CY - 4)
+
+      cohort.range <- cohorts[, c("cohort", "id")]
+        cohort.range$min <- cohort.range$cohort - 4
+        names(cohort.range)[which(names(cohort.range) == "cohort")] <- "max"
       
       # generate weighted core GPA
         gpa.core <- gpa[gpa$coreind == 1, ]
+          gpa.core <- merge(gpa.core, cohort.range, by.x = "permnum", by.y = "id")
+          gpa.core <- gpa.core[gpa.core$schoolyear >= gpa.core$min & 
+                      gpa.core$schoolyear <= gpa.core$max, ]
 
       # aggregate
-        gpa.agg <- ddply(gpa.core[, c("permnum", "schoolyear", "creditsattempted", 
+        gpa.agg <- ddply(gpa.core[, c("permnum", "creditsattempted", 
                                             "creditweightedmark", "coresubjectcode")], 
-                          c("permnum", "schoolyear", "coresubjectcode"), summarise, 
+                          c("permnum", "coresubjectcode"), summarise, 
                           N = length(permnum),
                           ca = sum(creditsattempted),
                           cw = sum(creditweightedmark), .parallel =FALSE)
 
 
-          gpa.aggm <- melt(gpa.agg[, c(1:3, 5:6)], id.vars = c(1:3))
-          gpa.aggr <- dcast(gpa.aggm, permnum + schoolyear ~ coresubjectcode + variable)
+          gpa.aggm <- melt(gpa.agg[, c(1:2, 4:5)], id.vars = c(1:2))
+          gpa.aggr <- dcast(gpa.aggm, permnum ~ coresubjectcode + variable)
 
 
             
@@ -404,10 +416,13 @@ rm(df, df2, list = ls(pattern = "gpa."))
                                              apply(gpa.aggr[, c("LA_ca", "MA_ca", "SC_ca", "SS_ca")], 
                                                    1, function(x) sum(x, na.rm = TRUE)), 1)
         
-              gpa.aggf <- gpa.aggr[, c("permnum", "schoolyear", "cu.gpa.la", "cu.gpa.ma", 
+              gpa.aggf <- gpa.aggr[, c("permnum", "cu.gpa.la", "cu.gpa.ma", 
                                          "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core")]
 
-  rm(gpa.agg, gpa.aggm, gpa.aggr, list=ls(pattern = "gpa"))
+                gpa.aggf <- gpa.aggf[!is.na(gpa.aggf$cu.gpa.la) | !is.na(gpa.aggf$cu.gpa.ma) |
+                                     !is.na(gpa.aggf$cu.gpa.sc) | !is.na(gpa.aggf$cu.gpa.ss), ]
+
+  rm(gpa, gpa.core, gpa.agg, gpa.aggm, gpa.aggr)
 
 
 
@@ -461,8 +476,8 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 							  ,[SUBJECT]
 							  ,[SCORE]
 						  FROM [Assessment].[dbo].[TEST_STU_SAT]
-						  WHERE EXAM_ADMIN_DATE >= ", cohortYear_shrt[1], "0531 and
-                    EXAM_ADMIN_DATE <= ", cohortYear_shrt[length(cohortYear_shrt)], "0531 and								
+						  WHERE EXAM_ADMIN_DATE >= ", cohortYear_shrt2[3], "0531 and
+                    EXAM_ADMIN_DATE <= ", cohortYear_shrt2[length(cohortYear_shrt2)], "0531 and								
                     NONSTAND_IND = '' and
 								    SUBJECT in ('MA', 'VE')
         "))
@@ -476,7 +491,7 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
                      satSS = mean(score))
 
         stopifnot(anyDuplicated(sat[, 1:2])==0)
-        sat$satSS <- round(sat$satSS)
+        sat$satSS <- (round(sat$satSS*.1 + .000001, 0))*10 # to round as usual, but back to nearest 10
           stopifnot(sat$satSS >= 200 & sat$satSS <= 800)
 
         # restructure
@@ -498,9 +513,6 @@ cohorts.nsc <- merge(cohorts, nsc.model, by.x = "id", by.y = "id")
 # ACT
 #########
 act.nsc <- merge(actStu, cohorts.nsc, by.x = "id", by.y = "id")
-# 2011 2012 2013  // counts by year
-# 3486 3815 4202  
-
 
 # CO
 ####
@@ -522,16 +534,25 @@ t$lt100 <- t$Freq < 100
     act.nsc <- act.nsc[, -which(names(act.nsc) == "CO")]
     names(act.nsc)[which(names(act.nsc) == "CO2")] <- "CO"
   act.nsc$cohort2 <- act.nsc$cohort - 3
+# 2008 2009 2010 // counts by cohort
+# 3533 3813 4152
 
     # check if every cell, once divided by cohort, is >= 30 cases
     stopifnot(as.data.frame(table(act.nsc$CO, act.nsc$cohort))[,3] >= 30)
+
+  # create totals for footnote
+  act.nsc.aggIT <- ddply(act.nsc[, c("CO", "i.t", "cohort2")], c("cohort2", "CO"), summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t))
+
+  N <- ddply(act.nsc.aggIT[!is.na(act.nsc.aggIT$CO), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort2, " = ", N$N, sep = "", collapse = ", ")
     
     
 # graphs
 
-pt <- ggplot(ddply(act.nsc[, c("CO", "i.t", "cohort2")], c("cohort2", "CO"), summarise, 
-                   N = length(i.t), 
-                   it_avg = mean(i.t)), 
+pt <- ggplot(act.nsc.aggIT, 
              aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ACT Score"))
@@ -548,11 +569,11 @@ print(pt)
 
 
 png(paste("../RaisngAchClsngGap/results/graphs/", 
-          "CO_ACT_to_NSC_imTrans_by_cohort.png", sep = ""), 
+          "act_CO_to_nsc_imTrans_by_cohort.png", sep = ""), 
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
-    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
                     "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
                     "\nData sources are GCPS administrative records and ", 
                     "The National Student Clearinghouse.\n"), 
@@ -563,9 +584,18 @@ png(paste("../RaisngAchClsngGap/results/graphs/",
 
 
 
-pt <- ggplot(ddply(act.nsc[, c("CO", "p.e", "cohort2")], c("cohort2", "CO"), summarise, 
+
+  # create totals for footnote
+  act.nsc.aggPE <- ddply(act.nsc[, c("CO", "p.e", "cohort2")], c("cohort2", "CO"), summarise, 
                    N = length(p.e), 
-                   pe_avg = mean(p.e)), 
+                   pe_avg = mean(p.e))
+
+  N <- ddply(act.nsc.aggPE[!is.na(act.nsc.aggPE$CO), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort2, " = ", N$N, sep = "", collapse = ", ")
+
+
+pt <- ggplot(act.nsc.aggPE, 
              aes(factor(CO), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ACT Score"))
@@ -582,11 +612,11 @@ print(pt)
 
 
 png(paste("../RaisngAchClsngGap/results/graphs/", 
-          "CO_ACT_to_NSC_persist_by_cohort.png", sep = ""), 
+          "act_CO_to_NSC_persist_by_cohort.png", sep = ""), 
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
-    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
                     "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
                     "\nData sources are GCPS administrative records and ", 
                     "The National Student Clearinghouse.\n"), 
@@ -650,11 +680,16 @@ subj <- apply(subj, 2, as.character)
 # immediate transition
 ###
 
-for (i in 1:4) {
+for (i in 1:length(subj[, 1])) {
+  
+  # create totals for footnote
+  N <- ddply(act.nsc.m2[act.nsc.m2$Subject == subj[i, 1] & !is.na(act.nsc.m2$Score), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort2, " = ", N$N, sep = "", collapse = ", ")
   
   
 
-pt <- ggplot(act.nsc.m2[act.nsc.m2$Subject == subj[i, 1], ], 
+pt <- ggplot(act.nsc.m2[act.nsc.m2$Subject == subj[i, 1] , ], 
              aes(factor(Score), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ", 
@@ -670,13 +705,13 @@ print(pt)
 #                     low, "\nand ", high, "-36 in ", high), 
 #                     x = 2.5, y = 99, size = 3)
 
-png(paste("../RaisngAchClsngGap/results/graphs/", 
-            subj[i, 1], "_ACT_to_NSC_imTrans_by_cohort.png", sep = ""), 
+png(paste("../RaisngAchClsngGap/results/graphs/act_", 
+            subj[i, 1], "_to_nsc_imTrans_by_cohort.png", sep = ""), 
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
                     "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
                     "\nData sources are GCPS administrative records and ", 
                     "The National Student Clearinghouse.\n"), 
@@ -691,11 +726,15 @@ makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an A
 ###
 
 
-for (i in 1:4) {
+for (i in 1:length(subj[, 1])) {
   
+# create totals for footnote
+N <- ddply(act.nsc.m2.p[act.nsc.m2.p$Subject == subj[i, 1] & !is.na(act.nsc.m2.p$Score), c("cohort2", "N")], "cohort2", summarise, 
+           N = sum(N))
+N$tot <- paste(N$cohort2, " = ", N$N, sep = "", collapse = ", ")
   
 
-pt <- ggplot(act.nsc.m2.p[act.nsc.m2.p$Subject == subj[i, 1], ], 
+pt <- ggplot(act.nsc.m2.p[act.nsc.m2.p$Subject == subj[i, 1] & !is.na(act.nsc.m2.p$Score), ], 
              aes(factor(Score), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
@@ -711,13 +750,13 @@ print(pt)
 #                     low, "\nand ", high, "-36 in ", high), 
 #                     x = 2.5, y = 99, size = 3)
 
-png(paste("../RaisngAchClsngGap/results/graphs/", 
-            subj[i, 1], "_ACT_to_NSC_persist_by_cohort.png", sep = ""), 
+png(paste("../RaisngAchClsngGap/results/graphs/act_", 
+            subj[i, 1], "_to_nsc_persist_by_cohort.png", sep = ""), 
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
                     "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
                     "\nData sources are GCPS administrative records and ", 
                     "The National Student Clearinghouse.\n"), 
@@ -737,7 +776,7 @@ makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an A
 #   p <- prop.table(t)
 #   c <- cumsum(p)
 #   return()            
-}
+
 
 act.nscF <- as.data.frame(lapply(act.nsc[, c("CO", "MA", "i.t", "p.e")], as.factor))
 
@@ -756,30 +795,181 @@ act.pe
 ##########
 # GPA
 ##########
-gpa.nsc <- merge(gc12.aggf, nsc, by.x = "permnum", by.y = "id")
-#     2012 //counts by year 
-#     8238
 
-cors.itgm <- cor(gpa.nsc$sem1.gpa.ma, gpa.nsc$i.t, use = "pairwise.complete.obs")
-cors.pegm <- cor(gpa.nsc$sem1.gpa.ma, gpa.nsc$p.e, use = "pairwise.complete.obs")
+gpa.aggf[, c("cu.gpa.la", "cu.gpa.ma", "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core")] <- 
+  trunc(round(gpa.aggf[, c("cu.gpa.la", "cu.gpa.ma", "cu.gpa.sc", 
+                           "cu.gpa.ss", "cu.gpa.core")], 0))
 
-gpa.itm <- ggplot(gpa.nsc, aes(i.t, sem1.gpa.ma)) + geom_boxplot()
+gpa.nsc <- merge(gpa.aggf, cohorts.nsc, by.x = "permnum", by.y = "id")
+gpa.nsc$cohort2 <- gpa.nsc$cohort - 3
+# 2008 2009 2010 // counts by cohort
+# 8966 9039 8667 
+
+cors.itgm <- cor(gpa.nsc$cu.gpa.ma, gpa.nsc$i.t, use = "pairwise.complete.obs")
+cors.pegm <- cor(gpa.nsc$cu.gpa.ma, gpa.nsc$p.e, use = "pairwise.complete.obs")
+
+gpa.itm <- ggplot(gpa.nsc, aes(i.t, cu.gpa.ma)) + geom_boxplot()
 gpa.itm
-gpa.pem <- ggplot(gpa.nsc, aes(p.e, sem1.gpa.ma)) + geom_boxplot()
+gpa.pem <- ggplot(gpa.nsc, aes(p.e, cu.gpa.ma)) + geom_boxplot()
 gpa.pem
 
-gpa.itv <- ggplot(gpa.nsc, aes(i.t, sem1.gpa.core)) + geom_boxplot()
+gpa.itv <- ggplot(gpa.nsc, aes(i.t, cu.gpa.core)) + geom_boxplot()
 gpa.itv
-gpa.pev <- ggplot(gpa.nsc, aes(p.e, sem1.gpa.core)) + geom_boxplot()
+gpa.pev <- ggplot(gpa.nsc, aes(p.e, cu.gpa.core)) + geom_boxplot()
 gpa.pev
+
+
+
+# barplots by gpa value
+####
+
+names(gpa.nsc)[which(names(gpa.nsc) == "permnum")] <- "id"
+
+# reshape for facet wrap by subj & cohort
+gpa.nsc.m <- melt(gpa.nsc[, c("id", "cu.gpa.la", "cu.gpa.ma", "cu.gpa.sc",             
+                              "cu.gpa.ss", "cu.gpa.core", "cohort2", "i.t", "p.e")], 
+                  id.vars = c("id", "cohort2", "i.t", "p.e"))
+
+# function to aggregate scores at ends w/ less than 100 cases across subjects
+t <- as.data.frame(table(gpa.nsc.m$variable, gpa.nsc.m$value))
+
+# max less than median; min greater than median for any subject
+
+t$lt100 <- t$Freq < 100
+names(t)[1] <- "Subj"
+names(t)[2] <- "Var1"
+  t$Var1 <- as.numeric(levels(t$Var1))[t$Var1]
+  low <- max(t[t$Var1 < 80 & t$lt100 == TRUE, "Var1"]) + 1
+  high <- min(t[t$Var1 > 80 & t$lt100 == TRUE, "Var1"]) - 1
+
+    t$value2 <- t$Var1
+    t[t$Var1 <= low, dim(t)[2]] <- low
+    t[t$Var1 >= high, dim(t)[2]] <- high
+
+  gpa.nsc.m <- merge(gpa.nsc.m, unique(t[, c("Var1", "value2")]), by.x = "value", by.y = "Var1", all.x = TRUE)
+  names(gpa.nsc.m)[6:7] <- c("Subject", "cumul.gpa")
+
+  gpa.nsc.m2 <- ddply(gpa.nsc.m[, c("cohort2", "Subject", "cumul.gpa", "i.t")], c("cohort2", "Subject", "cumul.gpa"), 
+                   summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t))
+
+  gpa.nsc.m2.p <- ddply(gpa.nsc.m[, c("cohort2", "Subject", "cumul.gpa", "p.e")], c("cohort2", "Subject", "cumul.gpa"), 
+                   summarise, 
+                   N = length(p.e), 
+                   pe_avg = mean(p.e))
+  
+    
+    # check if every cell, once divided by cohort, is >= 30 cases
+    stopifnot(table(gpa.nsc.m$cohort, gpa.nsc.m$Subject, gpa.nsc.m$cumul.gpa) >= 30)
+
+# graph
+
+subj <- as.data.frame(matrix(cbind(c("cu.gpa.la",  "cu.gpa.ma", "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core"), 
+                                   c("LA Cumulative HSGPA", "MA Cumulative HSGPA", "SC Cumulative HSGPA", 
+                                     "SS Cumulative HSGPA", "Core Cumulative HSGPA")), 
+                                   ncol = 2))
+subj <- apply(subj, 2, as.character)
+
+
+# immediate transition
+###
+
+for (i in 1:length(subj[, 1])) {
+  
+  # create totals for footnote
+  N <- ddply(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort, " = ", N$N, sep = "", collapse = ", ")
+  
+# create plot
+pt <- ggplot(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), ], 
+             aes(factor(cumul.gpa), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ", 
+                          subj[i, 2]))
+pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+png(paste("../RaisngAchClsngGap/results/graphs/gpa_", 
+            subj[i, 1], "_to_NSC_imTrans_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with a cumulative HSGPA (", N$tot[1], ").\n", 
+                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
+                    " and ", high, "-110 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "gpa_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
+}
+
+# persistence
+###
+
+
+for (i in 1:length(subj[, 1])) {
+  
+   # create totals for footnote
+  N <- ddply(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort, " = ", N$N, sep = "", collapse = ", ")
+
+pt <- ggplot(gpa.nsc.m2.p[gpa.nsc.m2.p$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), ],
+             aes(factor(cumul.gpa), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
+                          subj[i, 2]))
+pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+png(paste("../RaisngAchClsngGap/results/graphs/gpa_", 
+            subj[i, 1], "_to_NSC_persist_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with cumulative HSGPA (", N$tot[1], ").\n", 
+                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
+                    " and ", high, "-110 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "gpa_to_nsc_persist"), pt, envir = .GlobalEnv)
+
+}
+
+
 
 ###########
 # SAT
 ###########
 
-sat.nsc <- merge(sat, nsc, by.x = "stunumb", by.y = "id")
-#     2010 2011 2012 //counts by year 
-#      152 5072 6839
+sat.nsc <- merge(sat, cohorts.nsc, by.x = "stunumb", by.y = "id")
+
 
 sat.itm <- ggplot(sat.nsc, aes(i.t, ma)) + geom_boxplot()
 sat.itm
@@ -792,13 +982,153 @@ sat.pev <- ggplot(sat.nsc, aes(p.e, ve)) + geom_boxplot()
 sat.pev
 
 
+sat.nsc$cohort2 <- sat.nsc$cohort - 3
+# 2008 2009 2010 // by cohort
+# 6300 6884 6743 
 
 
+
+
+# barplots by gpa value
+####
+
+names(sat.nsc)[which(names(sat.nsc) == "stunumb")] <- "id"
+
+# reshape for facet wrap by subj & cohort
+sat.nsc.m <- melt(sat.nsc[, c("id", "ma", "ve", "cohort2", "i.t", "p.e")], 
+                  id.vars = c("id", "cohort2", "i.t", "p.e"))
+
+# function to aggregate scores at ends w/ less than 100 cases across subjects
+t <- as.data.frame(table(sat.nsc.m$variable, sat.nsc.m$value))
+
+# max less than median; min greater than median for any subject
+
+t$lt100 <- t$Freq < 100
+names(t)[1] <- "Subj"
+names(t)[2] <- "Var1"
+  t$Var1 <- as.numeric(levels(t$Var1))[t$Var1]
+  low <- max(t[t$Var1 < median(t$Var1) & t$lt100 == TRUE, "Var1"]) + 10
+  high <- min(t[t$Var1 > median(t$Var1) & t$lt100 == TRUE, "Var1"]) - 10
+
+    t$value2 <- t$Var1
+    t[t$Var1 <= low, dim(t)[2]] <- low
+    t[t$Var1 >= high, dim(t)[2]] <- high
+
+  gpa.nsc.m <- merge(gpa.nsc.m, unique(t[, c("Var1", "value2")]), by.x = "value", by.y = "Var1", all.x = TRUE)
+  names(gpa.nsc.m)[6:7] <- c("Subject", "cumul.gpa")
+
+  gpa.nsc.m2 <- ddply(gpa.nsc.m[, c("cohort2", "Subject", "cumul.gpa", "i.t")], c("cohort2", "Subject", "cumul.gpa"), 
+                   summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t))
+
+  gpa.nsc.m2.p <- ddply(gpa.nsc.m[, c("cohort2", "Subject", "cumul.gpa", "p.e")], c("cohort2", "Subject", "cumul.gpa"), 
+                   summarise, 
+                   N = length(p.e), 
+                   pe_avg = mean(p.e))
   
+    
+    # check if every cell, once divided by cohort, is >= 30 cases
+    stopifnot(table(gpa.nsc.m$cohort, gpa.nsc.m$Subject, gpa.nsc.m$cumul.gpa) >= 30)
+
+# graph
+
+subj <- as.data.frame(matrix(cbind(c("cu.gpa.la",  "cu.gpa.ma", "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core"), 
+                                   c("LA Cumulative HSGPA", "MA Cumulative HSGPA", "SC Cumulative HSGPA", 
+                                     "SS Cumulative HSGPA", "Core Cumulative HSGPA")), 
+                                   ncol = 2))
+subj <- apply(subj, 2, as.character)
 
 
+# immediate transition
+###
+
+for (i in 1:length(subj[, 1])) {
+  
+  # create totals for footnote
+  N <- ddply(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort, " = ", N$N, sep = "", collapse = ", ")
+  
+# create plot
+pt <- ggplot(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), ], 
+             aes(factor(cumul.gpa), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ", 
+                          subj[i, 2]))
+pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+png(paste("../RaisngAchClsngGap/results/graphs/gpa_", 
+            subj[i, 1], "_to_NSC_imTrans_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with a cumulative HSGPA (", N$tot[1], ").\n", 
+                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
+                    " and ", high, "-110 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "gpa_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
+}
+
+# persistence
+###
 
 
+for (i in 1:length(subj[, 1])) {
+  
+   # create totals for footnote
+  N <- ddply(gpa.nsc.m2[gpa.nsc.m2$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort, " = ", N$N, sep = "", collapse = ", ")
+
+pt <- ggplot(gpa.nsc.m2.p[gpa.nsc.m2.p$Subject == subj[i, 1] & !is.na(gpa.nsc.m2$cumul.gpa), ],
+             aes(factor(cumul.gpa), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
+                          subj[i, 2]))
+pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+png(paste("../RaisngAchClsngGap/results/graphs/gpa_", 
+            subj[i, 1], "_to_NSC_persist_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with cumulative HSGPA (", N$tot[1], ").\n", 
+                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
+                    " and ", high, "-110 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "gpa_to_nsc_persist"), pt, envir = .GlobalEnv)
+
+}
 
 
 
