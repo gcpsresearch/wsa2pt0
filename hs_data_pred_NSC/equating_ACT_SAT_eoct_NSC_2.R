@@ -5,7 +5,11 @@
 ##    give students an 80% chance of enrolling in college, and 2-year persistence in college
 
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.01.08 by James Appleton
+#   last updated  2015.01.15 by James Appleton
+
+############
+# Setup
+############
 
 require(ggplot2)
 require(grid)
@@ -14,6 +18,9 @@ require(plyr)
 require(foreign)
 require(reshape2)
 require(catspec)
+
+# registerDoParallel(4, cores = 4)
+# getDoParWorkers()
 
 rm(list=ls())
 path <- readLines("c:\\current_path.txt")
@@ -64,14 +71,14 @@ cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2013 doesn't have 4 semesters of ti
 
 yrs <- length(cohortYear_shrt)  # number of years set below
 
-startYear2       <- "2007-08" # for 2011 grads
-startYear_shrt2  <- "2008"
+startYear1       <- "2007-08" # for 2011 grads
+startYear_shrt1  <- "2008"
 
-startYear3       <- "2008-09" # for 2012 grads
-startYear_shrt3  <- "2009"
+startYear2       <- "2008-09" # for 2012 grads
+startYear_shrt2  <- "2009"
 
-startYear1       <- "2009-10" # for 2011 grads
-startYear_shrt1  <- "2010"
+startYear3       <- "2009-10" # for 2013 grads
+startYear_shrt3  <- "2010"
 
 startYear <- c(startYear1, startYear2, startYear3)
 startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
@@ -178,14 +185,14 @@ for (i in 1:yrs) {
 
     
   nsc.model <- nsc[, c("id", "cohort", "i.t", "p.e")]
-
-    ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
     
     
 
 ##################################
 ## get ACT data
 ##################################
+
+ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 
     act <- sqlQuery(ma_ch, paste0(
       "   SELECT [STUNUMB]
@@ -216,10 +223,13 @@ for (i in 1:yrs) {
 
     actStu <- dcast(actStu, id ~ subject)
 
+odbcClose(ma_ch)
 
 ##################################
 ## get EOCT econ data
 ##################################
+
+ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 
     econECT <- sqlQuery(ma_ch, paste0(
       "   SELECT [SCHOOL_YR]
@@ -250,30 +260,114 @@ for (i in 1:yrs) {
         econECT$econSS <- round(econECT$econSS)
           stopifnot(econECT$econSS >= 200 & econECT$econSS <= 650)
 
+odbcClose(ma_ch)
+
+########################
+# linking file for GTID
+########################
+
+ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
+
+    id <- sqlQuery(ma_ch, paste0(
+      
+    "      SELECT [STUDENT_ID]
+                ,[PERMNUM]
+            FROM [GSDR].[GEMS].[SDRC_HIST]
+    "))
+
+    id <- case.cols("id")
+      colnames(id) <- c("gtid", "id")
+    
+    # keep only one set of these // only 2 dups - better vetting method?
+    id <- id[!duplicated(id$gtid), ]
+
+    close(ma_ch)
+
+#######################################
+# load the cohorts and graduation data
+#######################################
+
+for (i in 1:3) { # b/c class of 2011 has only ~ 2K for 4-year intersect ALL school.ids
+
+fileLoc <- paste0(path,
+                  "\\RBES\\Graduation Rate\\Cohort Graduation Rate Data\\ClassOfSY", cohortYear_shrt[i])
+
+# this portion removes excess quotation marks
+d <- readLines(con = paste0(fileLoc, "\\data\\orig\\667Grad_candidate_list.csv"))
+d <- gsub("\"", "", d)
+      write.table(d, file = "d.txt", quote = FALSE, row.names = FALSE, col.names 
+                  = FALSE)
+      df <- read.csv(file = "d.txt",  header = TRUE)
+
+# df <- read.csv(paste0("..\\RaisngAchClsngGap\\data\\prep\\DOECohortData_", startYear[i],  
+#                         "_jja.csv"), sep = ",", header = TRUE)
+
+df <- case.cols("df")
+  names(df)[40] <- "update.diploma.type"
+
+      df <- df[df$grad.rate.type == 4 & df$school.id == "ALL", ]
+      df$grad <- df$update.diploma.type %in% c("G", "C", "B", "V")
+      df$cohort <- cohortYear_shrt[i]
+
+  df <- merge(df, id, by.x = "student.id", by.y = "gtid", all.x = TRUE)
+
+assign(paste0("cohort.", cohortYear_shrt[i]), df)
+
+}
+
+
+cohort.list <- as.list(rbind(list=ls(pattern = "cohort.2")))
+cohorts <- get(paste0(cohort.list[1]))
+
+for (i in 2:length(cohort.list)) {
+cohorts <- rbind(cohorts, get(paste0(cohort.list[i])))
+}
+
+# have a few state errors to fix; we will keep best case (e.g., grad over non-grad)
+                                  # after best case will take most recent
+if (anyDuplicated(cohorts$id) == 0) {
+  
+  cohorts <- cohorts[order(cohorts$id, -cohorts$grad, -cohorts$entry.school.year), ]
+  
+    cohorts <- cohorts[!duplicated(cohorts$id), ]
+}
+
+rm(list=ls(pattern = "cohort.2"))
+gc()
 
 ##################################
 ## get GPA data
 ##################################
 
-for (i in 1:length(cohortYear_shrt)) {
+ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
+
+cohortYear_shrt2 <- c(cohortYear_shrt - 6, cohortYear_shrt - 3, cohortYear_shrt)[-(1:2)]
+
+for (i in 1:length(cohortYear_shrt2)) {
 
 gpa <- sqlQuery(ma_ch, paste0(
       "SELECT * 
   		FROM	[Predictive_Analytics].[PAVIEW2].[v_Student_Course_History_DETAIL] 
-			WHERE 	SchoolYear = ", cohortYear_shrt[i], " and 
-					Grade in ('03', '04', '05', '06', '07', '08', '09', '10', '11', '12')
+			WHERE 	SchoolYear = ", cohortYear_shrt2[i], " and 
+					Grade in ('08', '09', '10', '11', '12')
       "))
 
     gpa <- case.cols("gpa")
+
+    gpa <- merge(gpa, cohorts, by.x = "permnum", by.y = "id")
+    
+    f <- sapply(gpa, is.factor)
+    gpa[f] <- lapply(gpa[f], as.character)
+
     #gpa[grepl("Science", gpa$coresubjectcode), "coreind"] <- 1
   
-  assign(paste0("gpa.", cohortYear_shrt[i]), gpa)
+  assign(paste0("gpa.", cohortYear_shrt2[i]), gpa)
 
 }
 
-df <- get(paste0("gpa.", cohortYear_shrt[1]))
-  for (j in 2:length(cohortYear_shrt)) {
-    df2 <- get(paste0("gpa.", cohortYear_shrt[i]))
+df <- get(paste0("gpa.", cohortYear_shrt2[1]))
+  for (j in 2:length(cohortYear_shrt2)) {
+    df2 <- get(paste0("gpa.", cohortYear_shrt2[j]))
     df <- rbind(df, df2)
   }
 
@@ -286,44 +380,78 @@ rm(df, df2, list = ls(pattern = "gpa."))
       
       # generate weighted core GPA
         gpa.core <- gpa[gpa$coreind == 1, ]
-      
-      # for 12th grade keep only 1st semester
-        gpa.core.12th <- gpa.core[gpa.core$calendarmonth > 7 & gpa.core$grade == 12, ]
-  
 
       # aggregate
-        gc12.agg <- ddply(gpa.core.12th[, c("permnum", "schoolyear", "creditsattempted", 
+        gpa.agg <- ddply(gpa.core[, c("permnum", "schoolyear", "creditsattempted", 
                                             "creditweightedmark", "coresubjectcode")], 
                           c("permnum", "schoolyear", "coresubjectcode"), summarise, 
                           N = length(permnum),
                           ca = sum(creditsattempted),
-                          cw = sum(creditweightedmark))
+                          cw = sum(creditweightedmark), .parallel =FALSE)
 
-          gc12.aggm <- melt(gc12.agg[, c(1:3, 5:6)], id.vars = c(1:3))
-          gc12.aggr <- dcast(gc12.aggm, permnum + schoolyear ~ coresubjectcode + variable)
+
+          gpa.aggm <- melt(gpa.agg[, c(1:3, 5:6)], id.vars = c(1:3))
+          gpa.aggr <- dcast(gpa.aggm, permnum + schoolyear ~ coresubjectcode + variable)
 
 
             
-            gc12.aggr$sem1.gpa.la <- round(gc12.aggr[, "LA_cw"] / gc12.aggr[, "LA_ca"], 1)
-            gc12.aggr$sem1.gpa.ma <- round(gc12.aggr[, "MA_cw"] / gc12.aggr[, "MA_ca"], 1)
-            gc12.aggr$sem1.gpa.sc <- round(gc12.aggr[, "SC_cw"] / gc12.aggr[, "SC_ca"], 1)
-            gc12.aggr$sem1.gpa.ss <- round(gc12.aggr[, "SS_cw"] / gc12.aggr[, "SS_ca"], 1)
-            gc12.aggr$sem1.gpa.core <- round(apply(gc12.aggr[, c("LA_cw", "MA_cw", "SC_cw", "SS_cw")], 
+            gpa.aggr$cu.gpa.la <- round(gpa.aggr[, "LA_cw"] / gpa.aggr[, "LA_ca"], 1)
+            gpa.aggr$cu.gpa.ma <- round(gpa.aggr[, "MA_cw"] / gpa.aggr[, "MA_ca"], 1)
+            gpa.aggr$cu.gpa.sc <- round(gpa.aggr[, "SC_cw"] / gpa.aggr[, "SC_ca"], 1)
+            gpa.aggr$cu.gpa.ss <- round(gpa.aggr[, "SS_cw"] / gpa.aggr[, "SS_ca"], 1)
+            gpa.aggr$cu.gpa.core <- round(apply(gpa.aggr[, c("LA_cw", "MA_cw", "SC_cw", "SS_cw")], 
                                                    1, function(x) sum(x, na.rm = TRUE)) / 
-                                             apply(gc12.aggr[, c("LA_ca", "MA_ca", "SC_ca", "SS_ca")], 
+                                             apply(gpa.aggr[, c("LA_ca", "MA_ca", "SC_ca", "SS_ca")], 
                                                    1, function(x) sum(x, na.rm = TRUE)), 1)
         
-              gc12.aggf <- gc12.aggr[, c("permnum", "schoolyear", "sem1.gpa.la", "sem1.gpa.ma", 
-                                         "sem1.gpa.sc", "sem1.gpa.ss", "sem1.gpa.core")]
+              gpa.aggf <- gpa.aggr[, c("permnum", "schoolyear", "cu.gpa.la", "cu.gpa.ma", 
+                                         "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core")]
 
-  rm(gc12.agg, gc12.aggm, gc12.aggr, list=ls(pattern = "gpa"))
+  rm(gpa.agg, gpa.aggm, gpa.aggr, list=ls(pattern = "gpa"))
+
+
+
+# below is 1st semester, 12th grade GPA - just for WSA, not district comparison
+      
+#       # for 12th grade keep only 1st semester
+#         gpa.core.12th <- gpa.core[gpa.core$calendarmonth > 7 & gpa.core$grade == 12, ]
+#   
+# 
+#       # aggregate
+#         gc12.agg <- ddply(gpa.core.12th[, c("permnum", "schoolyear", "creditsattempted", 
+#                                             "creditweightedmark", "coresubjectcode")], 
+#                           c("permnum", "schoolyear", "coresubjectcode"), summarise, 
+#                           N = length(permnum),
+#                           ca = sum(creditsattempted),
+#                           cw = sum(creditweightedmark))
+# 
+#           gc12.aggm <- melt(gc12.agg[, c(1:3, 5:6)], id.vars = c(1:3))
+#           gc12.aggr <- dcast(gc12.aggm, permnum + schoolyear ~ coresubjectcode + variable)
+# 
+# 
+#             
+#             gc12.aggr$sem1.gpa.la <- round(gc12.aggr[, "LA_cw"] / gc12.aggr[, "LA_ca"], 1)
+#             gc12.aggr$sem1.gpa.ma <- round(gc12.aggr[, "MA_cw"] / gc12.aggr[, "MA_ca"], 1)
+#             gc12.aggr$sem1.gpa.sc <- round(gc12.aggr[, "SC_cw"] / gc12.aggr[, "SC_ca"], 1)
+#             gc12.aggr$sem1.gpa.ss <- round(gc12.aggr[, "SS_cw"] / gc12.aggr[, "SS_ca"], 1)
+#             gc12.aggr$sem1.gpa.core <- round(apply(gc12.aggr[, c("LA_cw", "MA_cw", "SC_cw", "SS_cw")], 
+#                                                    1, function(x) sum(x, na.rm = TRUE)) / 
+#                                              apply(gc12.aggr[, c("LA_ca", "MA_ca", "SC_ca", "SS_ca")], 
+#                                                    1, function(x) sum(x, na.rm = TRUE)), 1)
+#         
+#               gc12.aggf <- gc12.aggr[, c("permnum", "schoolyear", "sem1.gpa.la", "sem1.gpa.ma", 
+#                                          "sem1.gpa.sc", "sem1.gpa.ss", "sem1.gpa.core")]
+# 
+#   rm(gc12.agg, gc12.aggm, gc12.aggr, list=ls(pattern = "gpa"))
   gc()
   
-
+odbcClose(ma_ch)
 
 ##################################
 ## get SAT data
 ##################################
+
+ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 
     sat <- sqlQuery(ma_ch, paste0(
       "   SELECT [STUNUMB]
@@ -357,82 +485,248 @@ rm(df, df2, list = ls(pattern = "gpa."))
         sat <- case.cols("sat")
           colnames(sat)[2:3] <- trim(names(sat)[2:3])
 
-########################
-# linking file for GTID
-########################
-
-    id <- sqlQuery(ma_ch, paste0(
-      
-    "      SELECT [STUDENT_ID]
-                ,[PERMNUM]
-            FROM [GSDR].[GEMS].[SDRC_HIST]
-    "))
-
-    id <- case.cols("id")
-      colnames(id) <- c("gtid", "id")
-    
-    # keep only one set of these // only 2 dups - better vetting method?
-    id <- id[!duplicated(id$gtid), ]
-
-    close(ma_ch)
-
-###########################
-# load the graduation data
-###########################
-
-for (i in 2:3) {
-
-fileLoc <- paste0(path,
-                  "\\RBES\\Graduation Rate\\Cohort Graduation Rate Data\\ClassOfSY", cohortYear_shrt[i])
-
-df <- read.csv(paste0("..\\RaisngAchClsngGap\\data\\prep\\DOECohortData_", startYear[i],  
-                        "_jja.csv"), sep = ",", header = TRUE)
-
-df <- case.cols("df")
-  names(df)[40] <- "update.diploma.type"
-
-      df <- df[df$grad.rate.type == 4 & df$school.id == "ALL", ]
-      df$grads <- df$update.diploma.type %in% c("G", "C", "B", "V")
-
-  df <- merge(df, id, by.x = "student.id", by.y = "gtid", all.x = TRUE)
-
-assign(paste0("grads.", cohortYear_shrt[i]), df)
-
-}
-
+odbcClose(ma_ch)
 
 ################################
 # make dfs and graph/model
 ################################
 
-grads.nsc11 <- merge(grads.2011, nsc, by.x = "id", by.y = "id")
+# keep all - think those entering late transferred in; [cohorts$entry.school.year %in% startYear_shrt, ]
+cohorts.nsc <- merge(cohorts, nsc.model, by.x = "id", by.y = "id")
 
+#########
 # ACT
-act.nsc <- merge(actStu, grads.nsc11, by.x = "id", by.y = "id")
-#     2010 2011 2012 //counts by year
-#     3258 3552 3830 
+#########
+act.nsc <- merge(actStu, cohorts.nsc, by.x = "id", by.y = "id")
+# 2011 2012 2013  // counts by year
+# 3486 3815 4202  
 
-t <- table(act.nsc$)
+
+# CO
+####
 
 
-pt <- ggplot(ddply(act.nsc2[, c("CO", "i.t")], "CO", summarise, 
+# function to aggregate scores at ends w/ less than 100 cases
+t <- as.data.frame(table(act.nsc$CO))
+
+# max less than median; min greater than median for CO
+
+t$lt100 <- t$Freq < 100
+  t$Var1 <- as.numeric(levels(t$Var1))[t$Var1]
+  low <- max(t[t$Var1 < median(t$Var1) & t$lt100 == TRUE, "Var1"]) + 1
+  high <- min(t[t$Var1 > median(t$Var1) & t$lt100 == TRUE, "Var1"]) - 1
+    t$CO2 <- t$Var1
+    t[t$Var1 <= low, dim(t)[2]] <- low
+    t[t$Var1 >= high, dim(t)[2]] <- high
+  act.nsc <- merge(act.nsc, t[, c("Var1", "CO2")], by.x = "CO", by.y = "Var1", all.x = TRUE)
+    act.nsc <- act.nsc[, -which(names(act.nsc) == "CO")]
+    names(act.nsc)[which(names(act.nsc) == "CO2")] <- "CO"
+  act.nsc$cohort2 <- act.nsc$cohort - 3
+
+    # check if every cell, once divided by cohort, is >= 30 cases
+    stopifnot(as.data.frame(table(act.nsc$CO, act.nsc$cohort))[,3] >= 30)
+    
+    
+# graphs
+
+pt <- ggplot(ddply(act.nsc[, c("CO", "i.t", "cohort2")], c("cohort2", "CO"), summarise, 
                    N = length(i.t), 
                    it_avg = mean(i.t)), 
              aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
-pt <- pt + ggtitle(paste0("Proportion of 2008-09 9th Grade Cohort with Seamless Post-Secondary Transition by ACT Score"))
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ACT Score"))
 pt <- pt + xlab("ACT Composite Score\n\n\n")
 pt <- pt + ylab("% with NSC Indicated Seamless Transition")
-pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 10)), limits = c(0, 100))
-pt <- pt + geom_text(vjust = 1, color = "white")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
-pt <- pt + annotate("text", label = "*Due to small counts\nACT scores of 1-12 in bar 12\nand 32-36 in 32", 
-                    x = 2.5, y = 99, size = 3)
+pt <- pt + facet_wrap(~ cohort2, ncol = 1)
 print(pt)
-makeFootnote(paste0("*Sample is students in GCPS fall 2008 9th grade cohort.\n", 
-                    "Data sources are GCPS administrative records and\n", 
-                    "National Student Clearinghouse."), 
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+          "CO_ACT_to_NSC_imTrans_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
              color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "act_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
+
+
+pt <- ggplot(ddply(act.nsc[, c("CO", "p.e", "cohort2")], c("cohort2", "CO"), summarise, 
+                   N = length(p.e), 
+                   pe_avg = mean(p.e)), 
+             aes(factor(CO), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ACT Score"))
+pt <- pt + xlab("ACT Composite Score\n\n\n")
+pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap(~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+          "CO_ACT_to_NSC_persist_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "act_to_nsc_persist"), pt, envir = .GlobalEnv)
+
+# EN, MA, RD, SC
+####
+
+# reshape for facet wrap by subj & cohort
+act.nsc.m <- melt(act.nsc[, c("id", "EN", "MA", "RD", "SC", "cohort2", "i.t", "p.e")], 
+                  id.vars = c("id", "cohort2", "i.t", "p.e"))
+
+
+
+
+
+# function to aggregate scores at ends w/ less than 100 cases across subjects
+t <- as.data.frame(table(act.nsc.m$variable, act.nsc.m$value))
+
+# max less than median; min greater than median for any subject
+
+t$lt100 <- t$Freq < 100
+names(t)[1] <- "Subj"
+names(t)[2] <- "Var1"
+  t$Var1 <- as.numeric(levels(t$Var1))[t$Var1]
+  low <- max(t[t$Var1 < median(t$Var1) & t$lt100 == TRUE, "Var1"]) + 1
+  high <- min(t[t$Var1 > median(t$Var1) & t$lt100 == TRUE, "Var1"]) - 1
+
+    t$value2 <- t$Var1
+    t[t$Var1 <= low, dim(t)[2]] <- low
+    t[t$Var1 >= high, dim(t)[2]] <- high
+
+  act.nsc.m <- merge(act.nsc.m, unique(t[, c("Var1", "value2")]), by.x = "value", by.y = "Var1", all.x = TRUE)
+  names(act.nsc.m)[6:7] <- c("Subject", "Score")
+
+  act.nsc.m2 <- ddply(act.nsc.m[, c("cohort2", "Subject", "Score", "i.t")], c("cohort2", "Subject", "Score"), 
+                   summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t))
+
+  act.nsc.m2.p <- ddply(act.nsc.m[, c("cohort2", "Subject", "Score", "p.e")], c("cohort2", "Subject", "Score"), 
+                   summarise, 
+                   N = length(p.e), 
+                   pe_avg = mean(p.e))
+  
+    
+    # check if every cell, once divided by cohort, is >= 30 cases
+    stopifnot(table(act.nsc.m$cohort2, act.nsc.m$Subject, act.nsc.m$Score) >= 30)
+
+# graph
+
+subj <- as.data.frame(matrix(cbind(c("EN", "MA", "RD", "SC"), 
+                                   c("English", "Mathematics", "Reading", "Science")), 
+                                   ncol = 2))
+subj <- apply(subj, 2, as.character)
+
+
+# immediate transition
+###
+
+for (i in 1:4) {
+  
+  
+
+pt <- ggplot(act.nsc.m2[act.nsc.m2$Subject == subj[i, 1], ], 
+             aes(factor(Score), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ", 
+                          "ACT ", subj[i, 2], " Score"))
+pt <- pt + xlab(paste0("ACT ", subj[i, 2], " Score\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+            subj[i, 1], "_ACT_to_NSC_imTrans_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "act_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
+}
+
+# persistence
+###
+
+
+for (i in 1:4) {
+  
+  
+
+pt <- ggplot(act.nsc.m2.p[act.nsc.m2.p$Subject == subj[i, 1], ], 
+             aes(factor(Score), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
+                          "ACT ", subj[i, 2], " Score"))
+pt <- pt + xlab(paste0("ACT ", subj[i, 2], " Score\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+            subj[i, 1], "_ACT_to_NSC_persist_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score.\n", 
+                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n"), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "act_to_nsc_persist"), pt, envir = .GlobalEnv)
+
+}
 
 
 
@@ -459,24 +753,9 @@ act.it
 act.pe <- ggplot(act.nsc, aes(p.e, CO)) + geom_boxplot()
 act.pe
 
-
-# SAT
-sat.nsc <- merge(sat, nsc, by.x = "stunumb", by.y = "id")
-#     2010 2011 2012 //counts by year 
-#      152 5072 6839
-
-sat.itm <- ggplot(sat.nsc, aes(i.t, ma)) + geom_boxplot()
-sat.itm
-sat.pem <- ggplot(sat.nsc, aes(p.e, ma)) + geom_boxplot()
-sat.pem
-
-sat.itv <- ggplot(sat.nsc, aes(i.t, ve)) + geom_boxplot()
-sat.itv
-sat.pev <- ggplot(sat.nsc, aes(p.e, ve)) + geom_boxplot()
-sat.pev
-
-
+##########
 # GPA
+##########
 gpa.nsc <- merge(gc12.aggf, nsc, by.x = "permnum", by.y = "id")
 #     2012 //counts by year 
 #     8238
@@ -493,6 +772,26 @@ gpa.itv <- ggplot(gpa.nsc, aes(i.t, sem1.gpa.core)) + geom_boxplot()
 gpa.itv
 gpa.pev <- ggplot(gpa.nsc, aes(p.e, sem1.gpa.core)) + geom_boxplot()
 gpa.pev
+
+###########
+# SAT
+###########
+
+sat.nsc <- merge(sat, nsc, by.x = "stunumb", by.y = "id")
+#     2010 2011 2012 //counts by year 
+#      152 5072 6839
+
+sat.itm <- ggplot(sat.nsc, aes(i.t, ma)) + geom_boxplot()
+sat.itm
+sat.pem <- ggplot(sat.nsc, aes(p.e, ma)) + geom_boxplot()
+sat.pem
+
+sat.itv <- ggplot(sat.nsc, aes(i.t, ve)) + geom_boxplot()
+sat.itv
+sat.pev <- ggplot(sat.nsc, aes(p.e, ve)) + geom_boxplot()
+sat.pev
+
+
 
 
   
