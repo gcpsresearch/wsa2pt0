@@ -5,7 +5,7 @@
 ##    give students an 80% chance of enrolling in college, and 2-year persistence in college
 
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.01.15 by James Appleton
+#   last updated  2015.01.20 by James Appleton
 
 ############
 # Setup
@@ -514,9 +514,19 @@ cohorts.nsc <- merge(cohorts, nsc.model, by.x = "id", by.y = "id")
 #########
 act.nsc <- merge(actStu, cohorts.nsc, by.x = "id", by.y = "id")
 
+
+
+subj <- as.data.frame(matrix(cbind(c("EN", "MA", "RD", "SC", "CO"), 
+                                   c("English", "Mathematics", "Reading", "Science", "Composite"), 
+                                   c(17, 17, 17, 19, 18), 
+                                   c(22, 23, 23, 23, 22)), 
+                                   ncol = 4))
+subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
+s <- sapply(subj, is.factor)
+subj[s] <- lapply(subj[s], as.character)
+
 # CO
 ####
-
 
 # function to aggregate scores at ends w/ less than 100 cases
 t <- as.data.frame(table(act.nsc$CO))
@@ -540,6 +550,8 @@ t$lt100 <- t$Freq < 100
     # check if every cell, once divided by cohort, is >= 30 cases
     stopifnot(as.data.frame(table(act.nsc$CO, act.nsc$cohort))[,3] >= 30)
 
+  act.nsc$CO.t <- act.nsc$CO >= subj[5, 3]
+
   # create totals for footnote
   act.nsc.aggIT <- ddply(act.nsc[, c("CO", "i.t", "cohort2")], c("cohort2", "CO"), summarise, 
                    N = length(i.t), 
@@ -555,12 +567,15 @@ t$lt100 <- t$Freq < 100
 pt <- ggplot(act.nsc.aggIT, 
              aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
-pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ACT Score"))
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \n", 
+                          "Post-Secondary Transition by ACT Score"))
 pt <- pt + xlab("ACT Composite Score\n\n\n")
 pt <- pt + ylab("% with NSC Indicated Seamless Transition")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[5, 3] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
+
 pt <- pt + facet_wrap(~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -573,14 +588,54 @@ png(paste("../RaisngAchClsngGap/results/graphs/",
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
-    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
-                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+    makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
+                    "Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high, ".",
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 80% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
    assign(paste0(subj[i, 1], "act_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
+
+# threshold only
+# graphs
+
+pt <- ggplot(act.nsc.aggIT, 
+             aes(factor(CO), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \n", 
+                          "Post-Secondary Transition by ACT Score"))
+pt <- pt + xlab("ACT Composite Score\n\n\n")
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[5, 3] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
+
+pt <- pt + facet_wrap(~ cohort2, ncol = 1)
+print(pt)
+# pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
+#                     low, "\nand ", high, "-36 in ", high), 
+#                     x = 2.5, y = 99, size = 3)
+
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+          "act_CO_to_nsc_imTrans_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+    makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
+                    "Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high, ".",
+                    "\nData sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 80% threshold value."), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "act_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
 
 
 
@@ -603,7 +658,8 @@ pt <- pt + xlab("ACT Composite Score\n\n\n")
 pt <- pt + ylab("% with NSC Indicated Persistence")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
-pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_hline(aes(yintercept = 67), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[5, 4] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap(~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -616,10 +672,11 @@ png(paste("../RaisngAchClsngGap/results/graphs/",
      res = 125, width = 1000, height = 674)#, 
      #width = 8, height = 6)
    print(pt)
-    makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
-                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+    makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
+                    "Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high, ".",
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 67% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -671,11 +728,6 @@ names(t)[2] <- "Var1"
 
 # graph
 
-subj <- as.data.frame(matrix(cbind(c("EN", "MA", "RD", "SC"), 
-                                   c("English", "Mathematics", "Reading", "Science")), 
-                                   ncol = 2))
-subj <- apply(subj, 2, as.character)
-
 
 # immediate transition
 ###
@@ -699,6 +751,7 @@ pt <- pt + ylab("% with NSC Indicated Seamless Transition")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[i, 3] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -711,10 +764,11 @@ png(paste("../RaisngAchClsngGap/results/graphs/act_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
-                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
+                    "Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high, ".",
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 80% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -743,7 +797,8 @@ pt <- pt + xlab(paste0("ACT ", subj[i, 2], " Score\n\n\n"))
 pt <- pt + ylab("% with NSC Indicated Persistence")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
-pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_hline(aes(yintercept = 67), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[i, 4] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -756,10 +811,11 @@ png(paste("../RaisngAchClsngGap/results/graphs/act_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
-                    "*Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high,
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
+                    "Due to small counts, ACT scores of 1-", low, " are in bar ", low, " and ", high, "-36 in ", high, ".",
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 67% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -867,9 +923,13 @@ names(t)[2] <- "Var1"
 
 subj <- as.data.frame(matrix(cbind(c("cu.gpa.la",  "cu.gpa.ma", "cu.gpa.sc", "cu.gpa.ss", "cu.gpa.core"), 
                                    c("LA Cumulative HSGPA", "MA Cumulative HSGPA", "SC Cumulative HSGPA", 
-                                     "SS Cumulative HSGPA", "Core Cumulative HSGPA")), 
-                                   ncol = 2))
-subj <- apply(subj, 2, as.character)
+                                     "SS Cumulative HSGPA", "Core Cumulative HSGPA"), 
+                                   c(87, 85, 85, 88, 86), 
+                                   c(90, 89, 89, 91, 88)), 
+                                   ncol = 4))
+subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
+s <- sapply(subj, is.factor)
+subj[s] <- lapply(subj[s], as.character)
 
 
 # immediate transition
@@ -893,6 +953,7 @@ pt <- pt + ylab("% with NSC Indicated Seamless Transition")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[i, 3] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -905,11 +966,12 @@ png(paste("../RaisngAchClsngGap/results/graphs/gpa_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with a cumulative HSGPA (", N$tot[1], ").\n", 
-                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
-                    " and ", high, "-110 in ", high,
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with a cumulative HSGPA (", N$tot[1], ").\n", 
+                    "Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
+                    " and ", high, "-110 in ", high, ".", 
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 80% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -937,7 +999,8 @@ pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
 pt <- pt + ylab("% with NSC Indicated Persistence")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
-pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_hline(aes(yintercept = 67), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[i, 4] - (low-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -950,19 +1013,18 @@ png(paste("../RaisngAchClsngGap/results/graphs/gpa_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with cumulative HSGPA (", N$tot[1], ").\n", 
-                    "*Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
-                    " and ", high, "-110 in ", high,
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with cumulative HSGPA (", N$tot[1], ").\n", 
+                    "Due to small counts, HSGPA values of 0-", low, " are in bar ", low, 
+                    " and ", high, "-110 in ", high, ".",
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 67% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
    assign(paste0(subj[i, 1], "gpa_to_nsc_persist"), pt, envir = .GlobalEnv)
 
 }
-
-
 
 ###########
 # SAT
@@ -1034,9 +1096,14 @@ names(t)[2] <- "Var1"
 # graph
 
 subj <- as.data.frame(matrix(cbind(c("ma",  "ve"), 
-                                   c("SAT Mathematics Scale Score", "SAT Critical Reading Scale Score")), 
-                                   ncol = 2))
-subj <- apply(subj, 2, as.character)
+                                   c("SAT Mathematics Scale Score", "SAT Critical Reading Scale Score"), 
+                                   c(460, 440), 
+                                   c(540, 570)), 
+                                   ncol = 4))
+subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
+s <- sapply(subj, is.factor)
+subj[s] <- lapply(subj[s], as.character)
+
 
 
 # immediate transition
@@ -1061,6 +1128,7 @@ pt <- pt + scale_x_discrete(breaks = c("350", "400", "450", "500", "550", "600",
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
 pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[i, 3]*.1 - (low*.1-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -1073,11 +1141,12 @@ png(paste("../RaisngAchClsngGap/results/graphs/sat_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an SAT Score (", N$tot[1], ").\n", 
-                    "*Due to small counts, SAT Scores of 200-", low, " are in bar ", low, 
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an SAT Score (", N$tot[1], ").\n", 
+                    "Due to small counts, SAT Scores of 200-", low, " are in bar ", low, 
                     " and ", high, "-800 in ", high,
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 80% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -1106,7 +1175,8 @@ pt <- pt + ylab("% with NSC Indicated Persistence")
 pt <- pt + scale_x_discrete(breaks = c("350", "400", "450", "500", "550", "600", "650", "700", "750", "800"))
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 3)
-pt <- pt + geom_hline(aes(yintercept = 60), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_hline(aes(yintercept = 67), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + geom_vline(aes(xintercept = subj[i, 4]*.1 - (low*.1-1)), size = 4, colour = "red", linetype = "solid", alpha = 0.25)
 pt <- pt + facet_wrap( ~ cohort2, ncol = 1)
 print(pt)
 # pt <- pt + annotate("text", label = paste0("*Due to small counts\nACT scores of 1-", low, " in bar ", 
@@ -1119,20 +1189,18 @@ png(paste("../RaisngAchClsngGap/results/graphs/sat_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("*Sample is students in GCPS fall 9th grade cohort with an SAT Score (", N$tot[1], ").\n", 
-                    "*Due to small counts, SAT Scores of 200-", low, " are in bar ", low, 
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an SAT Score (", N$tot[1], ").\n", 
+                    "Due to small counts, SAT Scores of 200-", low, " are in bar ", low, 
                     " and ", high, "-800 in ", high,
                     "\nData sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse.\n"), 
+                    "The National Student Clearinghouse.\n",
+                    "Red vertical bar indicates 67% threshold value."), 
              color = "grey60", size = .5)
  
   dev.off()
    assign(paste0(subj[i, 1], "gpa_to_nsc_persist"), pt, envir = .GlobalEnv)
 
 }
-
-
-
 
 
 
