@@ -1147,7 +1147,7 @@ pt <- ggplot(gpa.nsc.m2.pt[gpa.nsc.m2.pt$Subject == subj[i, 1] & !is.na(gpa.nsc.
 pt <- pt + geom_bar(stat = "identity")
 pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
                           subj[i, 2], " Threshold"))
-pt <- pt + xlab(paste0("\nMet HSGPA ", subj[i, 2], " Threshold of ", subj[i, 4], "\n\n"))
+pt <- pt + xlab(paste0("\nMet ", subj[i, 2], " Threshold of ", subj[i, 4], "\n\n"))
 pt <- pt + ylab("% with NSC Indicated Persistence")
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
 pt <- pt + geom_text(vjust = 1, color = "white", size = 5)
@@ -1238,12 +1238,20 @@ names(t)[2] <- "Var1"
   sat.nsc.m <- merge(sat.nsc.m, unique(t[, c("Var1", "value2")]), by.x = "value", by.y = "Var1", all.x = TRUE)
   names(sat.nsc.m)[6:7] <- c("Subject", "Score")
 
+  sat.nsc.m.t <- merge(sat.nsc.m, subj[, c(1, 3:4)], by.x = "Subject", by.y = "V1", all.x = TRUE)
+    sat.nsc.m.t$pe.mt <- ifelse(sat.nsc.m.t$Score >= sat.nsc.m.t$pe.t & !(is.na(sat.nsc.m.t$Score)), "Yes", "No")
+
   sat.nsc.m2 <- ddply(sat.nsc.m[, c("cohort2", "Subject", "Score", "i.t")], c("cohort2", "Subject", "Score"), 
                    summarise, 
                    N = length(i.t), 
                    it_avg = mean(i.t))
 
   sat.nsc.m2.p <- ddply(sat.nsc.m[, c("cohort2", "Subject", "Score", "p.e")], c("cohort2", "Subject", "Score"), 
+                   summarise, 
+                   N = length(p.e), 
+                   pe_avg = mean(p.e))
+
+  sat.nsc.m2.pt <- ddply(sat.nsc.m.t[, c("cohort2", "Subject", "pe.mt", "p.e")], c("cohort2", "Subject", "pe.mt"), 
                    summarise, 
                    N = length(p.e), 
                    pe_avg = mean(p.e))
@@ -1349,9 +1357,42 @@ makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an SA
   dev.off()
    assign(paste0(subj[i, 1], "gpa_to_nsc_persist"), pt, envir = .GlobalEnv)
 
+
+# threshold only
+# graphs
+
+pt <- ggplot(sat.nsc.m2.pt[sat.nsc.m2.pt$Subject == subj[i, 1] & !is.na(sat.nsc.m2.pt$pe.mt), ], 
+             aes(factor(pe.mt), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
+                          "SAT ", subj[i, 2], " Threshold"))
+pt <- pt + xlab(paste0("Met SAT ", subj[i, 2], " Threshold of ", subj[i, 4], "\n\n\n"))
+pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 5)
+pt <- pt + geom_hline(aes(yintercept = 67), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap( ~ cohort2, ncol = 3)
+print(pt)
+
+
+png(paste("../RaisngAchClsngGap/results/graphs/sat_", 
+            subj[i, 1], "_to_nsc_persist_thresh_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an SAT score (", N$tot[1], ").\n", 
+                    "Data sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse."),
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "sat_to_nsc_persist_thresh"), pt, envir = .GlobalEnv)
+
+
 }
 
-save.image("../Research Projects/RaisngAchClsngGap/data/prep/act_apib_gpa_sat_nsc.RData")
+save.image("../RaisngAchClsngGap/data/prep/act_apib_gpa_sat_nsc.RData")
 
 
 
