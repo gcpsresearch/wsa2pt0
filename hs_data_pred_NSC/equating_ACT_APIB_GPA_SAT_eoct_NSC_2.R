@@ -1213,8 +1213,8 @@ sat.nsc.m <- melt(sat.nsc[, c("id", "ma", "ve", "cohort2", "i.t", "p.e")],
 t <- as.data.frame(table(sat.nsc.m$variable, sat.nsc.m$value))
 
 subj <- as.data.frame(matrix(cbind(c("ma",  "ve"), 
-                                   c("SAT Mathematics Scale Score", "SAT Critical Reading Scale Score"), 
-                                   c(460, 440), 
+                                   c("Mathematics", "Critical Reading"), 
+                                   c(490, 470), 
                                    c(580, 580)), 
                                    ncol = 4))
 subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
@@ -1277,9 +1277,9 @@ for (i in 1:length(subj[, 1])) {
 pt <- ggplot(sat.nsc.m2[sat.nsc.m2$Subject == subj[i, 1] & !is.na(sat.nsc.m2$Score), ], 
              aes(factor(Score), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
-pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by ", 
-                          subj[i, 2]))
-pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless \nPost-Secondary Transition by SAT ", 
+                          subj[i, 2], " Scale Score"))
+pt <- pt + xlab(paste0("SAT ", subj[i, 2], " Scale Score\n\n\n"))
 pt <- pt + ylab("% with NSC Indicated Seamless Transition")
 pt <- pt + scale_x_discrete(breaks = c("350", "400", "450", "500", "550", "600", "650", "700", "750", "800"))
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
@@ -1325,9 +1325,9 @@ for (i in 1:length(subj[, 1])) {
 pt <- ggplot(sat.nsc.m2.p[sat.nsc.m2.p$Subject == subj[i, 1] & !is.na(sat.nsc.m2$Score), ],
              aes(factor(Score), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
 pt <- pt + geom_bar(stat = "identity")
-pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by ", 
-                          subj[i, 2]))
-pt <- pt + xlab(paste0(subj[i, 2], "\n\n\n"))
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year\n Post-Secondary Persistence by SAT ", 
+                          subj[i, 2], " Scale Score"))
+pt <- pt + xlab(paste0("\nSAT ", subj[i, 2], " Scale Score\n\n\n"))
 pt <- pt + ylab("% with NSC Indicated Persistence")
 pt <- pt + scale_x_discrete(breaks = c("350", "400", "450", "500", "550", "600", "650", "700", "750", "800"))
 pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
@@ -1393,7 +1393,6 @@ makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an SA
 }
 
 save.image("../RaisngAchClsngGap/data/prep/act_apib_gpa_sat_nsc.RData")
-
 
 
 

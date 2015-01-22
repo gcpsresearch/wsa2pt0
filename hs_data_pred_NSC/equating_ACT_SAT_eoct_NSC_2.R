@@ -83,6 +83,7 @@ startYear_shrt3  <- "2010"
 
 startYear <- c(startYear1, startYear2, startYear3)
 startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
+
 ###################################################
 ### Load the NSC data
 ###################################################
@@ -227,6 +228,110 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 odbcClose(ma_ch)
 
 ##################################
+## get AP/IB data
+##################################
+
+# AP Exam of 3+ or A or B average in IB courses with >= 1.0 credits earned
+
+ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
+
+
+# ib courses
+    ib.link <- sqlQuery(ma_ch, paste0("
+          SELECT  [COURSE]
+                 ,[LONGTITLE]
+            FROM [GSDR].[GEMS].[SASI_ACRS]
+            WHERE FTE_TYPE = 'B'
+        "))
+
+    ib.link <- case.cols("ib.link")
+
+
+    gsdr.ib <- sqlQuery(ma_ch, paste0("
+        SELECT [PERMNUM]
+              ,[SCHOOL_YEAR]
+              ,[COURSE]
+              ,[CREDIT_EARNED]
+              ,[MARK_NUMERIC]
+        FROM   [GSDR].[GEMS].[SDRD_HIST]
+        WHERE  [SCHOOL_YEAR] >=", cohortYear_shrt[1] - 3, " and 
+  	           [SCHOOL_YEAR] <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
+		           cast(CREDIT_EARNED as int) > 0
+        "))
+      gsdr.ib <- case.cols("gsdr.ib")
+    gsdr.ib <- merge(gsdr.ib, ib.link, by.x = "course", by.y = "course")
+
+      names(gsdr.ib)[which(names(gsdr.ib) == "permnum")] <- "id"
+      gsdr.ib$mark_numeric <- as.character(gsdr.ib$mark_numeric)
+      gsdr.ib$mark_numeric <- as.numeric(gsdr.ib$mark_numeric)
+
+      gsdr.ib.agg <- ddply(gsdr.ib[, c("id", "mark_numeric", "credit_earned")], "id", summarise, 
+                  wtdMk  = sum(mark_numeric*credit_earned*.001),
+                  creds = sum(credit_earned*.001))
+
+      gsdr.ib.agg$mark <- gsdr.ib.agg$wtdMk/gsdr.ib.agg$creds
+      gsdr.ib.agg$ib.t2 <- gsdr.ib.agg$mark >= 80 & gsdr.ib.agg$creds >= 1
+
+
+    ib <- sqlQuery(ma_ch, paste0("
+            SELECT [permnum]
+                  ,[grade]
+                  ,[school_year]
+                  ,[term]
+                  ,[course]
+                  ,[course_name]
+                  ,[mark]
+                  ,[credit_attempted]
+                  ,[credit_earned]
+                  ,[course_identifier]
+              FROM [ResearchAndEvaluation].[dbo].[APCourses]
+              WHERE school_year >=", cohortYear_shrt[1] - 3, " and
+              	    school_year <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
+                    course_identifier = 'I' and 
+                    credit_earned > 0
+        "))
+
+    ib <- case.cols("ib")
+    names(ib)[which(names(ib) == "permnum")] <- "id"
+      ib$mark <- as.character(ib$mark)
+      ib[ib$mark == "AUD", "mark"] <- "0"
+      ib$mark <- as.numeric(ib$mark)
+
+      ib.agg <- ddply(ib[, c("id", "mark", "credit_earned")], "id", summarise, 
+                  wtdMk  = sum(mark*credit_earned),
+                  creds = sum(credit_earned))
+
+      ib.agg$mark <- ib.agg$wtdMk/ib.agg$creds
+      ib.agg$ib.t <- ib.agg$mark >= 80 & ib.agg$creds >= 1
+      
+
+# ap exams; uses "- 4" to get back to 8th grade for earliest cohort
+    ap <- sqlQuery(ma_ch, paste0("
+
+            SELECT [STUNUMB]
+                  ,[TEST_KEY]
+                  ,[GRADE]
+                  ,[EXAM_ADMIN_DATE]
+                  ,[SCORE]
+                  ,[SCHOOL_YEAR]
+              FROM [Assessment].[dbo].[TEST_STU_APP]
+              WHERE SCHOOL_YEAR >=", cohortYear_shrt[1] - 4, " and 
+                    SCHOOL_YEAR <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
+                    SCORE is not null and 
+                    SCORE != 0
+        "))
+
+    ap <- case.cols("ap")
+    names(ap)[which(names(ap) == "stunumb")] <- "id"
+
+      ap.agg <- ddply(ap[, c("id", "score")], "id", summarise, 
+                  mxScr  = max(score))
+
+      ap.agg$ap.t <- ap.agg$mxScr >= 3
+
+odbcClose(ma_ch)
+
+##################################
 ## get EOCT econ data
 ##################################
 
@@ -335,6 +440,15 @@ if (anyDuplicated(cohorts$id) != 0) {
 
 rm(list=ls(pattern = "cohort.2"))
 gc()
+
+# updated.withdrawal.reason that is transfer out
+transfers <- cbind(c("Transfer: Private School", "Transfer: Homeschool", "Transfer: Other System", 
+                     "Transfer: Another State", "Transfer: Out of Country", "Transfer: DJJ", 
+                     "Death", "SB10 Transfer to State Schools", "SB10 Transfer to Private School", 
+                     "SB10 Transfer to Public School"), 
+                   c("K", "H", "T", "X", "J", "4", "D", "Y", "Z", "1"))
+
+cohorts <- cohorts[!(cohorts$updated.withdrawal.reason %in% transfers[, 2]), ]
 
 ##################################
 ## get GPA data
@@ -507,19 +621,24 @@ odbcClose(ma_ch)
 ################################
 
 # keep all - think those entering late transferred in; [cohorts$entry.school.year %in% startYear_shrt, ]
-cohorts.nsc <- merge(cohorts, nsc.model, by.x = "id", by.y = "id")
+cohorts.nsc <- merge(cohorts, nsc.model, by.x = "id", by.y = "id", all.x = TRUE)
+cohorts.nsc[is.na(cohorts.nsc$i.t), "i.t"] <- FALSE
+cohorts.nsc[is.na(cohorts.nsc$p.e), "p.e"] <- FALSE
 
 #########
 # ACT
 #########
-act.nsc <- merge(actStu, cohorts.nsc, by.x = "id", by.y = "id")
-
+act.nsc <- merge(cohorts.nsc, actStu, by.x = "id", by.y = "id")#, all.x = TRUE)
+#   act.nsc <- merge(act.nsc, sat, by.x = "id", by.y = "stunumb", all.x = TRUE)
+#     act.nsc$mi <- apply(act.nsc[, c("CO", "EN", "MA", "RD", "SC", "ma", "ve")], 1, function(x) sum(is.na(x)))
+#     act.nsc <- act.nsc[act.nsc$mi < 7, -((dim(act.nsc)[2] - 2):dim(act.nsc)[2])]
+    
 
 
 subj <- as.data.frame(matrix(cbind(c("EN", "MA", "RD", "SC", "CO"), 
                                    c("English", "Mathematics", "Reading", "Science", "Composite"), 
                                    c(17, 17, 17, 19, 18), 
-                                   c(22, 23, 23, 23, 22)), 
+                                   c(24, 23, 23, 23, 24)), 
                                    ncol = 4))
 subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
 s <- sapply(subj, is.factor)
@@ -685,6 +804,8 @@ png(paste("../RaisngAchClsngGap/results/graphs/",
 # EN, MA, RD, SC
 ####
 
+subj <- subj[-5, ] # remove "CO" from this analysis bc done above
+
 # reshape for facet wrap by subj & cohort
 act.nsc.m <- melt(act.nsc[, c("id", "EN", "MA", "RD", "SC", "cohort2", "i.t", "p.e")], 
                   id.vars = c("id", "cohort2", "i.t", "p.e"))
@@ -848,6 +969,104 @@ act.it
 act.pe <- ggplot(act.nsc, aes(p.e, CO)) + geom_boxplot()
 act.pe
 
+#########
+# AP/IB
+#########
+
+apib.nsc <- merge(cohorts.nsc, ap.agg[, c("id", "ap.t")], by.x = "id", by.y = "id", 
+                  all.x = TRUE)
+apib.nsc <- merge(apib.nsc, ib.agg[, c("id", "ib.t")], by.x = "id", by.y = "id", 
+                  all.x = TRUE)
+apib.nsc <- merge(apib.nsc, gsdr.ib.agg[, c("id", "ib.t2")], by.x = "id", by.y = "id", 
+                  all.x = TRUE)
+  apib.nsc$apib.t <-  ifelse(apib.nsc$ap.t == TRUE & !is.na(apib.nsc$ap.t) | 
+                      apib.nsc$ib.t == TRUE & !is.na(apib.nsc$ib.t) | 
+                      apib.nsc$ib.t2 == TRUE & !is.na(apib.nsc$ib.t2), "Yes", "No")
+  apib.nsc$cohort2 <- apib.nsc$cohort - 3
+
+  
+
+  # create totals for footnote
+  apib.nsc.aggIT <- ddply(apib.nsc[, c("apib.t", "i.t", "cohort2")], c("cohort2", "apib.t"), summarise, 
+                   N = length(i.t), 
+                   it_avg = mean(i.t))
+
+  N <- ddply(apib.nsc.aggIT[!is.na(apib.nsc.aggIT$apib.t), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort2, " = ", N$N, sep = "", collapse = ", ")
+    
+    
+# graphs
+
+pt <- ggplot(apib.nsc.aggIT, 
+             aes(factor(apib.t), y = round(it_avg*100, 1), label = round(it_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with Seamless ", 
+                          "Post-Secondary Transition by \nAt Least: 1 AP Exam Scored 3 or Higher OR ", 
+                          "1 IB Course Graded B or Higher"))
+pt <- pt + xlab("\nAP Exam of (3, 4, or 5) OR IB Course Grade of (A or B)\n\n")
+pt <- pt + ylab("% with NSC Indicated Seamless Transition")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 5)
+pt <- pt + geom_hline(aes(yintercept = 80), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap(~ cohort2, ncol = 1)
+print(pt)
+
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+          "apib_to_nsc_imTrans_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+    makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort (", N$tot[1], ").\n", 
+                    "Data sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse."), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "apib_to_nsc_imTrans"), pt, envir = .GlobalEnv)
+
+
+
+
+  # create totals for footnote
+  apib.nsc.aggPE <- ddply(apib.nsc[, c("apib.t", "p.e", "cohort2")], c("cohort2", "apib.t"), summarise, 
+                   N = length(p.e), 
+                   pe_avg = mean(p.e))
+
+  N <- ddply(apib.nsc.aggPE[!is.na(apib.nsc.aggPE$apib.t), c("cohort2", "N")], "cohort2", summarise, 
+             N = sum(N))
+  N$tot <- paste(N$cohort2, " = ", N$N, sep = "", collapse = ", ")
+
+
+pt <- ggplot(apib.nsc.aggPE, 
+             aes(factor(apib.t), y = round(pe_avg*100, 1), label = round(pe_avg*100, 0)))
+pt <- pt + geom_bar(stat = "identity")
+pt <- pt + ggtitle(paste0("Proportion of 9th Grade Cohort with One-Year Post-Secondary ", 
+                          "Persistence by \nAt Least: 1 AP Exam Scored 3 or Higher OR ", 
+                          "1 IB Course Graded B or Higher"))
+pt <- pt + xlab("\nAP Exam of (3, 4, or 5) OR IB Course Grade of (A or B)\n\n")
+pt <- pt + ylab("% with NSC Indicated Persistence")
+pt <- pt + scale_y_continuous(breaks = c(seq(0, 100, 20)), limits = c(0, 100))
+pt <- pt + geom_text(vjust = 1, color = "white", size = 5)
+pt <- pt + geom_hline(aes(yintercept = 67), size = 1, colour = "red", linetype = "dashed")
+pt <- pt + facet_wrap(~ cohort2, ncol = 1)
+print(pt)
+
+
+png(paste("../RaisngAchClsngGap/results/graphs/", 
+          "apib_to_nsc_persist_by_cohort.png", sep = ""), 
+     res = 125, width = 1000, height = 674)#, 
+     #width = 8, height = 6)
+   print(pt)
+    makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort (", N$tot[1], ").\n", 
+                    "Data sources are GCPS administrative records and ", 
+                    "The National Student Clearinghouse."), 
+             color = "grey60", size = .5)
+ 
+  dev.off()
+   assign(paste0(subj[i, 1], "apib_to_nsc_persist"), pt, envir = .GlobalEnv)
+
 ##########
 # GPA
 ##########
@@ -925,7 +1144,7 @@ subj <- as.data.frame(matrix(cbind(c("cu.gpa.la",  "cu.gpa.ma", "cu.gpa.sc", "cu
                                    c("LA Cumulative HSGPA", "MA Cumulative HSGPA", "SC Cumulative HSGPA", 
                                      "SS Cumulative HSGPA", "Core Cumulative HSGPA"), 
                                    c(87, 85, 85, 88, 86), 
-                                   c(90, 89, 89, 91, 88)), 
+                                   c(92, 91, 92, 92, 92)), 
                                    ncol = 4))
 subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
 s <- sapply(subj, is.factor)
@@ -1098,7 +1317,7 @@ names(t)[2] <- "Var1"
 subj <- as.data.frame(matrix(cbind(c("ma",  "ve"), 
                                    c("SAT Mathematics Scale Score", "SAT Critical Reading Scale Score"), 
                                    c(460, 440), 
-                                   c(540, 570)), 
+                                   c(580, 580)), 
                                    ncol = 4))
 subj[,3:4] <- lapply(subj[, 3:4], function(x) {as.numeric(levels(x))[x]})
 s <- sapply(subj, is.factor)
