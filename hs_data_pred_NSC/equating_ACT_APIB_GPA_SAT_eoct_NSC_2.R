@@ -23,7 +23,7 @@ require(catspec)
 # registerDoParallel(4, cores = 4)
 # getDoParWorkers()
 
-rm(list=ls())
+rm(list=ls()) 
 path <- readLines("c:\\current_path.txt")
 
 # set directories
@@ -655,9 +655,6 @@ act.nsc.m <- melt(act.nsc[, c("id", "CO", "EN", "MA", "RD", "SC", "cohort2", "i.
                   id.vars = c("id", "cohort2", "i.t", "p.e"))
 
 
-
-
-
 # function to aggregate scores at ends w/ less than 100 cases across subjects
 t <- as.data.frame(table(act.nsc.m$variable, act.nsc.m$value))
 
@@ -823,7 +820,8 @@ png(paste("../RaisngAchClsngGap/results/graphs/act_",
 
 makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
                     "Data sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse."),
+                    "The National Student Clearinghouse.\n",
+                    "Dashed line indicates 2/3 (or 67%) of students persisting."),
              color = "grey60", size = .5)
  
   dev.off()
@@ -907,7 +905,8 @@ png(paste("../RaisngAchClsngGap/results/graphs/",
    print(pt)
     makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort (", N$tot[1], ").\n", 
                     "Data sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse."), 
+                    "The National Student Clearinghouse.\n",
+                    "Dashed line indicates 2/3 (or 67%) of students persisting."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -948,7 +947,8 @@ png(paste("../RaisngAchClsngGap/results/graphs/",
    print(pt)
     makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort (", N$tot[1], ").\n", 
                     "Data sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse."), 
+                    "The National Student Clearinghouse.\n",
+                    "Dashed line indicates 2/3 (or 67%) of students persisting."), 
              color = "grey60", size = .5)
  
   dev.off()
@@ -1165,9 +1165,10 @@ png(paste("../RaisngAchClsngGap/results/graphs/gpa_",
      #width = 8, height = 6)
    print(pt)
 
-makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an ACT score (", N$tot[1], ").\n", 
+makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with cumulative HSGPA (", N$tot[1], ").\n", 
                     "Data sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse."),
+                    "The National Student Clearinghouse.\n",
+                    "Dashed line indicates 2/3 (or 67%) of students persisting."),
              color = "grey60", size = .5)
  
   dev.off()
@@ -1383,7 +1384,8 @@ png(paste("../RaisngAchClsngGap/results/graphs/sat_",
 
 makeFootnote(paste0("Sample is students in GCPS fall 9th grade cohort with an SAT score (", N$tot[1], ").\n", 
                     "Data sources are GCPS administrative records and ", 
-                    "The National Student Clearinghouse."),
+                    "The National Student Clearinghouse.\n",
+                    "Dashed line indicates 2/3 (or 67%) of students persisting."),
              color = "grey60", size = .5)
  
   dev.off()
