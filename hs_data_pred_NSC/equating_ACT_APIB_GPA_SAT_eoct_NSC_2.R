@@ -18,6 +18,7 @@ require(plyr)
 require(foreign)
 require(reshape2)
 require(catspec)
+require(data.table)
 
 
 # registerDoParallel(4, cores = 4)
@@ -68,7 +69,7 @@ makeFootnote <- function(footnoteText =
 
 # set years for graduation data
 
-cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2013 doesn't have 4 semesters of time yet
+cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2014 doesn't have 2 semesters of time yet
 
 yrs <- length(cohortYear_shrt)  # number of years set below
 
@@ -121,25 +122,19 @@ for (i in 1:yrs) {
       nsc <- nsc[!is.na(nsc$cohort), ]
 
   # create immed.transition and persist.enroll variables
+    # date choice source: http://gardnercenter.stanford.edu/resources/publications/TechnicalGuide.CRIS.pdf (p.6)
 
   nsc$i.t <- FALSE
   nsc$p.e1 <- FALSE
-#   nsc$p.e2 <- FALSE
-#   nsc$p.e3 <- FALSE
-
   
 
   for (i in 1:yrs) {
     
     nsc[nsc$i.t == FALSE, "i.t"] <- nsc[nsc$i.t == FALSE, "enrollment_begin"] < cohortYear_shrt[i]*10000 + 1101 & 
                    nsc[nsc$i.t == FALSE, "enrollment_end"] > cohortYear_shrt[i]*10000 + 915 & 
-                   nsc[nsc$i.t == FALSE, "cohort"] == cohortYear_shrt[i] #& 
-                   #nsc[nsc$i.t == FALSE, "enrollment_status"] == "F"
+                   nsc[nsc$i.t == FALSE, "cohort"] == cohortYear_shrt[i] & 
+                   nsc[nsc$i.t == FALSE, "enrollment_status"] == "F"
     
-#     nsc[nsc$i.t == FALSE, "i.t"] <- as.numeric(nsc[nsc$i.t == FALSE, "enrollment_begin"]) < cohortYear_shrt[i]*10000 + 1231 & 
-#                    as.numeric(nsc[nsc$i.t == FALSE, "enrollment_begin"]) > cohortYear_shrt[i]*10000 + 0801
-#                    nsc[nsc$i.t == FALSE, "cohort"] == cohortYear_shrt[i] 
-#     
       it <- ddply(nsc[, c("id", "i.t")], "id", summarise, 
                   immed.t = sum(i.t))
       it$i.t <- it$immed.t > 0
@@ -153,31 +148,14 @@ for (i in 1:yrs) {
                     nsc[nsc$p.e1 == FALSE, "cohort"] == cohortYear_shrt[i] & 
                     nsc[nsc$p.e1 == FALSE, "enrollment_status"] %in% c("F", "Q")
 
-# b/c p.e. now only 1 academic year
-
-#     nsc[nsc$p.e2 == FALSE, "p.e2"] <- nsc[nsc$p.e2 == FALSE, "i.t"] == TRUE &     
-#                     nsc[nsc$p.e2 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 1)*10000 + 1101 & 
-#                     nsc[nsc$p.e2 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 1)*10000 + 915 & 
-#                     nsc[nsc$p.e2 == FALSE, "cohort"] == cohortYear_shrt[i] & 
-#                     nsc[nsc$p.e2 == FALSE, "enrollment_status"] %in% c("F", "Q")
-#  
-#     nsc[nsc$p.e3 == FALSE, "p.e3"] <- nsc[nsc$p.e3 == FALSE, "i.t"] == TRUE & 
-#                     nsc[nsc$p.e3 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 2)*10000 + 501 & 
-#                     nsc[nsc$p.e3 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 2)*10000 + 301 & 
-#                     nsc[nsc$p.e3 == FALSE, "cohort"] == cohortYear_shrt[i] & 
-#                     nsc[nsc$p.e3 == FALSE, "enrollment_status"] %in% c("F", "Q")
-
   }
     
       mrg <- ddply(nsc[, c("id", "p.e1", 
-                           #"p.e2", "p.e3", 
                            "i.t")], "id", summarise, 
                    pe1 = sum(p.e1), 
-#                    pe2 = sum(p.e2), 
-#                    pe3 = sum(p.e3), 
                    i.t = sum(i.t))
     
-        mrg$p.e <- mrg$pe1 == 1 #& mrg$pe2 == 1 & mrg$pe3 == 1
+        mrg$p.e <- mrg$pe1 > 0
     
         nsc <- merge(nsc, mrg[, c("id", "i.t", "p.e")], by.x = "id", by.y = "id", all.x = TRUE)
                   colnames(nsc)[which(names(nsc) == "i.t.x")] <- "i.t"
