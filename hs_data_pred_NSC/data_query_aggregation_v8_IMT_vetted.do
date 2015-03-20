@@ -72,11 +72,11 @@ clear all
 	- %Enrolled days absent
 	- Disciplinary Index
 	- SEI annual average (F + S) (MS, HS only)
-	//- Census - maternal (paternal?) ed level, income, community ed level
+	//- Census - community level deprivation & inequality ***Updated- RAR(2015.03.13)
 	
 		
 	-Created by:		2013.12.19 by James Appleton
-	-Last revised: 		2014.11.12 by James Appleton
+	-Last revised: 		2015.03.16 by Roland Richard
 	
 *******************************************************************************/
 	global		twelfth		"1"		// set to 1 if modeling 11th grd to 12th grd
@@ -1306,38 +1306,24 @@ restore
 ********************
 
 preserve
-	use data/prep/Pov_Inc_Ratio_Summarized, clear
-	
+	use data/prep/wsa_census_dep, clear
+
 		foreach var of varlist* { 
 		destring `var', replace
 		rename `var' `=lower("`var'")'
 		}
-	tempfile t118
-	save `t118', replace
+	format %13.0f fips
+	tempfile absm
+	save `absm', replace
 	
-	use data/prep/wsa_census_sy2011_15jul2014, clear
+	use data/prep/wsa_fips_sy2011, clear
+		
 		foreach var of varlist* { 
 		destring `var', replace
 		rename `var' `=lower("`var'")'
 		}
-	merge m:1 fips using `t118', nogen keep(1 3)
-	gen p_t025_00678 = (t025_006+ t025_007+ t025_008)/t025_001
-	keep id fips p_t025_00678 p_t030_003 p_t037_003 pct_t118_002 pct_t118_003 ///
-			pct_t118_005
-			
-	rename (	p_t025_00678 ///
-				p_t030_003 ///
-				p_t037_003 ///
-				pct_t118_002 ///
-				pct_t118_003 ///
-				pct_t118_005) ///
-			(	pct_25andUp_wCollDegPlus ///
-				pct_16to19_wHSdiplOrEnr ///
-				pct_16PlusEmployed ///
-				pct_incToPovRatioLess1 ///
-				pct_incToPovRatioFrom1toLess2 ///
-				pct_incToPovRatio2Plus)
-				
+		format %13.0f fips
+	merge m:1 fips using `absm', nogen keep(1 3)
 			foreach var of varlist* {
 			rename `var' `var'_H1
 			}
