@@ -25,6 +25,7 @@ require(data.table)
 # getDoParWorkers()
 
 rm(list=ls()) 
+gc()
 path <- readLines("c:\\current_path.txt")
 
 # set directories
@@ -105,8 +106,8 @@ nsc <- read.csv(paste0(path, "\\Research Projects\\NSC Student Tracker\\",
 
 for (i in 1:yrs) {
   
-    nsc[nsc$high_school_grad_date > (cohortYear_shrt[i] - 1)*10000 + 0801 & 
-        nsc$high_school_grad_date < cohortYear_shrt[i]*10000 + 0731, dim(nsc)[2]] <- cohortYear_shrt[i]
+    nsc[nsc$high_school_grad_date >= (cohortYear_shrt[i] - 1)*10000 + 0801 & 
+        nsc$high_school_grad_date <= cohortYear_shrt[i]*10000 + 0731, dim(nsc)[2]] <- cohortYear_shrt[i]
 }
 
 
