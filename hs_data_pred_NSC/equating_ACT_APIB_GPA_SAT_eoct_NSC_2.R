@@ -5,7 +5,7 @@
 ##    give students an 80% chance of enrolling in college, and 2-year persistence in college
 
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.01.20 by James Appleton
+#   last updated  2015.03.26 by James Appleton
 
 ############
 # Setup
@@ -19,6 +19,7 @@ require(foreign)
 require(reshape2)
 require(catspec)
 require(data.table)
+require(lubridate)
 
 
 # registerDoParallel(4, cores = 4)
@@ -70,21 +71,21 @@ makeFootnote <- function(footnoteText =
 
 # set years for graduation data
 
-cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2014 doesn't have 2 semesters of time yet
+gradYear_shrt <- c(2011, 2012, 2013) # b/c 2014 doesn't have 2 semesters of time yet
 
-yrs <- length(cohortYear_shrt)  # number of years set below
+yrs <- length(gradYear_shrt)  # number of years set below
 
-startYear1       <- "2007-08" # for 2011 grads
-startYear_shrt1  <- "2008"
+fourYear1       <- "2007-08" # for 2011 grads
+fourYear_shrt1  <- "2008"
 
-startYear2       <- "2008-09" # for 2012 grads
-startYear_shrt2  <- "2009"
+fourYear2       <- "2008-09" # for 2012 grads
+fourYear_shrt2  <- "2009"
 
-startYear3       <- "2009-10" # for 2013 grads
-startYear_shrt3  <- "2010"
+fourYear3       <- "2009-10" # for 2013 grads
+fourYear_shrt3  <- "2010"
 
-startYear <- c(startYear1, startYear2, startYear3)
-startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
+fourYear <- c(fourYear1, fourYear2, fourYear3)
+fourYear_shrt <- c(fourYear_shrt1, fourYear_shrt2, fourYear_shrt3)
 
 ###################################################
 ### Load the NSC data
@@ -97,76 +98,140 @@ nsc <- read.csv(paste0(path, "\\Research Projects\\NSC Student Tracker\\",
 
   nsc <- case.cols("nsc")
 
+  # parse date to extract calendar days enrolled
+  nsc$e.beg <- ymd(nsc$enrollment_begin)
+  nsc$e.end <- ymd(nsc$enrollment_end)
+
   # change NA enrollment begin and end dates so can't count within enrollment periods
-  nsc[is.na(nsc$enrollment_begin), "enrollment_begin" ] <- 0
-  nsc[is.na(nsc$enrollment_end), "enrollment_end" ] <- 0
+#   nsc[is.na(nsc$e.beg), "e.beg" ] <- 0
+#   nsc[is.na(nsc$e.end), "e.end" ] <- 0
 
   # keep students graduating in cohort years and assign cohort
-  nsc$cohort <- NA
+  nsc$gradGroup <- NA
+  nsc$academicYr <- NA
 
 for (i in 1:yrs) {
   
-    nsc[nsc$high_school_grad_date >= (cohortYear_shrt[i] - 1)*10000 + 0801 & 
-        nsc$high_school_grad_date <= cohortYear_shrt[i]*10000 + 0731, dim(nsc)[2]] <- cohortYear_shrt[i]
+    nsc[nsc$high_school_grad_date >= (gradYear_shrt[i] - 1)*10000 + 0801 & 
+        nsc$high_school_grad_date <= gradYear_shrt[i]*10000 + 0731, "gradGroup"] <- gradYear_shrt[i]
+    
+    nsc[!is.na(nsc$enrollment_begin) &
+          nsc$enrollment_begin >= (gradYear_shrt[i])*10000 + 0801 & 
+          !is.na(nsc$enrollment_end) & 
+        nsc$enrollment_end <= (gradYear_shrt[i] + 1)*10000 + 0815, "academicYr"] <- gradYear_shrt[i]
 }
+
+# check that both enrollment_begin and enrollment_end are always both NA if either one is NA
+stopifnot(is.na(nsc[is.na(nsc$e.beg), "e.end"]))
+  stopifnot(is.na(nsc[is.na(nsc$e.end), "e.beg"]))
+# check day differences are as expected: enrollment_end greater than enrollment_begin
+  stopifnot(nsc[!is.na(nsc$e.end), "e.end"] - 
+              nsc[!is.na(nsc$e.end), "e.beg"] >= 0)
+
+
+nsc$e.days <- NA
+nsc[!is.na(nsc$e.beg), "e.days"] <- nsc[!is.na(nsc$e.end), "e.end"] - 
+              nsc[!is.na(nsc$e.end), "e.beg"]
+nsc$e.days <- nsc$e.days/(60*60*24)
 
 
 
 # (F)ull-time, (H)alf-time, (L)ess than half-time, (Q) 3/4 time, 
-#   (A) Leave of absence, (W)ithdrawn, (D)eceased
+#   (A) Leave of absence, (W)ithdrawn, (D)eceased, (" ") blank if school doesn't define
+  # to deal with this we will (" ") will not exclude an enrollment from counting
 #   from: http://www.studentclearinghouse.org/colleges/files/ST_DetailReportGuide.pdf
+
+recY_noGrad <- expression(nsc$record_found_y.n == "Y" & is.na(nsc$graduation_date))
 
   # create gcps id
   nsc[,1] <- as.character(nsc[,1])
   nsc$id <- as.numeric(substr(nsc[,1], 1, nchar(nsc[,1]) - 1))
 
-      nsc <- nsc[!is.na(nsc$cohort), ]
+      nsc <- nsc[!is.na(nsc$gradGroup), ]
 
   # create immed.transition and persist.enroll variables
     # date choice source: http://gardnercenter.stanford.edu/resources/publications/TechnicalGuide.CRIS.pdf (p.6)
+      # check on variation in days enrolled (e.g., Feb. 29 through March 2) - can we set min num of days?
 
   nsc$i.t <- FALSE
-  nsc$p.e1 <- FALSE
+  nsc$p.e <- FALSE
   
 
-  for (i in 1:yrs) {
+  for (i in gradYear_shrt) {
+          
+          # it filter
+          filt.it <- expression(nsc$i.t == FALSE & 
+                                  nsc$record_found_y.n == "Y" & 
+                                  is.na(nsc$graduation_date))
     
-    nsc[nsc$i.t == FALSE, "i.t"] <- nsc[nsc$i.t == FALSE, "enrollment_begin"] < cohortYear_shrt[i]*10000 + 1101 & 
-                   nsc[nsc$i.t == FALSE, "enrollment_end"] > cohortYear_shrt[i]*10000 + 915 & 
-                   nsc[nsc$i.t == FALSE, "cohort"] == cohortYear_shrt[i] & 
-                   nsc[nsc$i.t == FALSE, "enrollment_status"] == "F"
+        # immediate transition (i.t) calculation
+        nsc[eval(df.filt), "i.t"] <- nsc[eval(filt.it), "enrollment_begin"] < i*10000 + 1101 & 
+                                      nsc[eval(filt.it), "enrollment_end"] > i*10000 + 915 & 
+                                      nsc[eval(filt.it), "gradGroup"] == i #& 
+                                      #nsc[eval(filt.it), "enrollment_status"] %in% c("F", "")
+        
+            # need to sum days across parameter-meeting enrollments b/c institutions split enrollments differently
+            it <- ddply(nsc[!is.na(nsc$e.days), c("id", "i.t", "e.days")], c("id", "i.t"), summarise, 
+                        immed.t = sum(i.t),
+                        e.sum   = sum(e.days))
+          
+            # does the sum of parameter-meeting enrollments meet our minimum number of days?
+            it$i.t2 <- it$immed.t > 0 & it$e.sum >= 54 # quarters range from 8 to 13 weeks or 56 to 91 days; 54 allows for end bf weekend
+          
+              # filter down to one row per student    
+              it <- ddply(it[, c("id", "i.t2")], "id", summarise, 
+                          i.t2 = sum(i.t2) > 0)
+        
+              nsc[nsc$gradGroup == i, "i.t"] <- FALSE
+  
+              # keep accruing i.t TRUEs for subsequent p.e step; Assumes we only care that >= 1 record is i.t
+              nsc[nsc$i.t == FALSE & 
+                    nsc$id %in% it[it$i.t2 == TRUE, "id"], 
+                  "i.t"] <- TRUE
     
-      it <- ddply(nsc[, c("id", "i.t")], "id", summarise, 
-                  immed.t = sum(i.t))
-      it$i.t <- it$immed.t > 0
-        nsc <- nsc[, -(which(names(nsc) %in% c("i.t")))]
-    
-        nsc <- merge(nsc, it[, c(1, 3)], by.x = "id", by.y = "id", all.x = TRUE)
-    
-    nsc[nsc$p.e1 == FALSE, "p.e1"] <- nsc[nsc$p.e1 == FALSE, "i.t"] == TRUE & 
-                    nsc[nsc$p.e1 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 1)*10000 + 501 & 
-                    nsc[nsc$p.e1 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 1)*10000 + 301 & 
-                    nsc[nsc$p.e1 == FALSE, "cohort"] == cohortYear_shrt[i] & 
-                    nsc[nsc$p.e1 == FALSE, "enrollment_status"] %in% c("F", "Q")
+          # pe filter
+          filt.pe <- expression(nsc$p.e == FALSE & 
+                                  nsc$record_found_y.n == "Y" & 
+                                  is.na(nsc$graduation_date))
+        
+      # persistent enrollment (p.e) calculation     
+       nsc[eval(filt.pe), "p.e"] <- nsc[eval(filt.pe), "i.t"] == TRUE &
+                                      nsc[eval(filt.pe), "enrollment_begin"] < (i + 1)*10000 + 501 & 
+                                      nsc[eval(filt.pe), "enrollment_end"] > (i + 1)*10000 + 301 & 
+                                      nsc[eval(filt.pe), "gradGroup"] == i #& 
+                                      #nsc[eval(filt.pe), "enrollment_status"] %in% c("F", "Q", "")
 
+
+            pe <- ddply(nsc[!is.na(nsc$e.days), c("id", "p.e", "e.days")], c("id", "p.e"), summarise, 
+                        pers.e = sum(p.e),
+                        e.sum   = sum(e.days))
+          
+            pe$p.e2 <- pe$pers.e > 0 & pe$e.sum >= 54 # quarters range from 8 to 13 weeks or 56 to 91 days; 54 allows for end bf weekend
+    
+            # filter down to one row per student    
+            pe <- ddply(pe[, c("id", "p.e2")], "id", summarise, 
+                        p.e2 = sum(p.e2) > 0)
+        
+            # keep accruing p.e TRUEs; assumes we only care that >= 1 record is p.e
+              nsc[nsc$p.e == FALSE & 
+                nsc$id %in% pe[pe$p.e2 == TRUE, "id"], 
+                "p.e"] <- TRUE
+                  
   }
-    
-      mrg <- ddply(nsc[, c("id", "p.e1", 
-                           "i.t")], "id", summarise, 
-                   pe1 = sum(p.e1), 
-                   i.t = sum(i.t))
-    
-        mrg$p.e <- mrg$pe1 > 0
-    
-        nsc <- merge(nsc, mrg[, c("id", "i.t", "p.e")], by.x = "id", by.y = "id", all.x = TRUE)
-                  colnames(nsc)[which(names(nsc) == "i.t.x")] <- "i.t"
 
+      
         nsc <- unique(nsc[, c("id", "first_name", "middle_name", "last_name", 
-                              "high_school_grad_date", "cohort", "i.t", "p.e")])
+                              "high_school_grad_date", "gradGroup", "i.t", "p.e")])
 
-    
-  nsc.model <- nsc[, c("id", "i.t", "p.e")]
-    
+        nsc.model <- ddply(nsc[, c("id", "i.t", "p.e")], "id", summarise, 
+                          i.t = sum(i.t) > 0, 
+                          p.e = sum(p.e) > 0)
+
+        # check percentages relative to NSC report
+        print(mean(nsc.model$i.t))
+        print(mean(nsc.model$p.e))
+
+  stopifnot(.69 - mean(nsc.model$i.t) < .03)
     
 
 ##################################
@@ -183,8 +248,8 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
                 ,[SUBJECT]
                 ,[SCALE_SCORE]
           FROM [Assessment].[dbo].[TEST_STU_ACT]
-          WHERE SCHOOL_YEAR >= ", cohortYear_shrt[1] - 3, " and ", 
-		            "SCHOOL_YEAR <= ", cohortYear_shrt[length(cohortYear_shrt)], " and ", 
+          WHERE SCHOOL_YEAR >= ", gradYear_shrt[1] - 3, " and ", 
+		            "SCHOOL_YEAR <= ", gradYear_shrt[length(gradYear_shrt)], " and ", 
                 "SCALE_SCORE is not null and
                 SCALE_SCORE != 0
         "))
@@ -233,8 +298,8 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
               ,[CREDIT_EARNED]
               ,[MARK_NUMERIC]
         FROM   [GSDR].[GEMS].[SDRD_HIST]
-        WHERE  [SCHOOL_YEAR] >=", cohortYear_shrt[1] - 3, " and 
-  	           [SCHOOL_YEAR] <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
+        WHERE  [SCHOOL_YEAR] >=", gradYear_shrt[1] - 3, " and 
+  	           [SCHOOL_YEAR] <=", gradYear_shrt[length(gradYear_shrt)], " and 
 		           cast(CREDIT_EARNED as int) > 0
         "))
       gsdr.ib <- case.cols("gsdr.ib")
@@ -264,8 +329,8 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
                   ,[credit_earned]
                   ,[course_identifier]
               FROM [ResearchAndEvaluation].[dbo].[APCourses]
-              WHERE school_year >=", cohortYear_shrt[1] - 3, " and
-              	    school_year <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
+              WHERE school_year >=", gradYear_shrt[1] - 3, " and
+              	    school_year <=", gradYear_shrt[length(gradYear_shrt)], " and 
                     course_identifier = 'I' and 
                     credit_earned > 0
         "))
@@ -294,8 +359,8 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
                   ,[SCORE]
                   ,[SCHOOL_YEAR]
               FROM [Assessment].[dbo].[TEST_STU_APP]
-              WHERE SCHOOL_YEAR >=", cohortYear_shrt[1] - 4, " and 
-                    SCHOOL_YEAR <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
+              WHERE SCHOOL_YEAR >=", gradYear_shrt[1] - 4, " and 
+                    SCHOOL_YEAR <=", gradYear_shrt[length(gradYear_shrt)], " and 
                     SCORE is not null and 
                     SCORE != 0
         "))
@@ -326,7 +391,7 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
               ,[TOTAL_SCALE_SCORE]
           FROM [Assessment].[dbo].[TEST_STU_ECT]
           WHERE SUBJECT = 'ECO' and 
-                SCHOOL_YR in (", paste(cohortYear_shrt, sep = "", collapse = ", "), 
+                SCHOOL_YR in (", paste(gradYear_shrt, sep = "", collapse = ", "), 
                 ") and ", 
                 "TOTAL_SCALE_SCORE is not null and
                 TOTAL_SCALE_SCORE != 0
@@ -375,7 +440,7 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 for (i in 1:3) { # b/c class of 2011 has only ~ 2K for 4-year intersect ALL school.ids
 
 fileLoc <- paste0(path,
-                  "\\RBES\\Graduation Rate\\Cohort Graduation Rate Data\\ClassOfSY", cohortYear_shrt[i])
+                  "\\RBES\\Graduation Rate\\Cohort Graduation Rate Data\\ClassOfSY", gradYear_shrt[i])
 
 # this portion removes excess quotation marks
 d <- readLines(con = paste0(fileLoc, "\\data\\orig\\667Grad_candidate_list.csv"))
@@ -384,7 +449,7 @@ d <- gsub("\"", "", d)
                   = FALSE)
       df <- read.csv(file = "d.txt",  header = TRUE)
 
-# df <- read.csv(paste0("..\\RaisngAchClsngGap\\data\\prep\\DOECohortData_", startYear[i],  
+# df <- read.csv(paste0("..\\RaisngAchClsngGap\\data\\prep\\DOECohortData_", fourYear[i],  
 #                         "_jja.csv"), sep = ",", header = TRUE)
 
 df <- case.cols("df")
@@ -392,11 +457,11 @@ df <- case.cols("df")
 
       df <- df[df$grad.rate.type == 4 & df$school.id == "ALL", ]
       df$grad <- df$update.diploma.type %in% c("G", "C", "B", "V")
-      df$cohort <- cohortYear_shrt[i]
+      df$cohort <- gradYear_shrt[i]
 
   df <- merge(df, id, by.x = "student.id", by.y = "gtid", all.x = TRUE)
 
-assign(paste0("cohort.", cohortYear_shrt[i]), df)
+assign(paste0("cohort.", gradYear_shrt[i]), df)
 
 }
 
@@ -435,14 +500,14 @@ cohorts <- cohorts[!(cohorts$updated.withdrawal.reason %in% transfers[, 2]), ]
 
 ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 
-cohortYear_shrt2 <- c(cohortYear_shrt - 6, cohortYear_shrt - 3, cohortYear_shrt)[-(1:2)]
+gradYear_shrt2 <- c(gradYear_shrt - 6, gradYear_shrt - 3, gradYear_shrt)[-(1:2)]
 
-for (i in 1:length(cohortYear_shrt2)) {
+for (i in 1:length(gradYear_shrt2)) {
 
 gpa <- sqlQuery(ma_ch, paste0(
       "SELECT * 
   		FROM	[Predictive_Analytics].[PAVIEW2].[v_Student_Course_History_DETAIL] 
-			WHERE 	SchoolYear = ", cohortYear_shrt2[i], " and 
+			WHERE 	SchoolYear = ", gradYear_shrt2[i], " and 
 					Grade in ('08', '09', '10', '11', '12')
       "))
 
@@ -455,13 +520,13 @@ gpa <- sqlQuery(ma_ch, paste0(
 
     #gpa[grepl("Science", gpa$coresubjectcode), "coreind"] <- 1
   
-  assign(paste0("gpa.", cohortYear_shrt2[i]), gpa)
+  assign(paste0("gpa.", gradYear_shrt2[i]), gpa)
 
 }
 
-df <- get(paste0("gpa.", cohortYear_shrt2[1]))
-  for (j in 2:length(cohortYear_shrt2)) {
-    df2 <- get(paste0("gpa.", cohortYear_shrt2[j]))
+df <- get(paste0("gpa.", gradYear_shrt2[1]))
+  for (j in 2:length(gradYear_shrt2)) {
+    df2 <- get(paste0("gpa.", gradYear_shrt2[j]))
     df <- rbind(df, df2)
   }
 
@@ -569,8 +634,8 @@ ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 							  ,[SUBJECT]
 							  ,[SCORE]
 						  FROM [Assessment].[dbo].[TEST_STU_SAT]
-						  WHERE EXAM_ADMIN_DATE >= ", cohortYear_shrt2[3], "0531 and
-                    EXAM_ADMIN_DATE <= ", cohortYear_shrt2[length(cohortYear_shrt2)], "0531 and								
+						  WHERE EXAM_ADMIN_DATE >= ", gradYear_shrt2[3], "0531 and
+                    EXAM_ADMIN_DATE <= ", gradYear_shrt2[length(gradYear_shrt2)], "0531 and								
                     NONSTAND_IND = '' and
 								    SUBJECT in ('MA', 'VE')
         "))
@@ -599,7 +664,7 @@ odbcClose(ma_ch)
 # make dfs and graph/model
 ################################
 
-# keep all - think those entering late transferred in; [cohorts$entry.school.year %in% startYear_shrt, ]
+# keep all - think those entering late transferred in; [cohorts$entry.school.year %in% fourYear_shrt, ]
 cohorts.nsc <- merge(cohorts, nsc.model, by.x = "id", by.y = "id", all.x = TRUE)
 cohorts.nsc[is.na(cohorts.nsc$i.t), "i.t"] <- FALSE
 cohorts.nsc[is.na(cohorts.nsc$p.e), "p.e"] <- FALSE
