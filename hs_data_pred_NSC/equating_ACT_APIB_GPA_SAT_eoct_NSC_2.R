@@ -165,10 +165,10 @@ recY_noGrad <- expression(nsc$record_found_y.n == "Y" & is.na(nsc$graduation_dat
                                   is.na(nsc$graduation_date))
     
         # immediate transition (i.t) calculation
-        nsc[eval(df.filt), "i.t"] <- nsc[eval(filt.it), "enrollment_begin"] < i*10000 + 1101 & 
+        nsc[eval(filt.it), "i.t"] <- nsc[eval(filt.it), "enrollment_begin"] < i*10000 + 1101 & 
                                       nsc[eval(filt.it), "enrollment_end"] > i*10000 + 915 & 
-                                      nsc[eval(filt.it), "gradGroup"] == i #& 
-                                      #nsc[eval(filt.it), "enrollment_status"] %in% c("F", "")
+                                      nsc[eval(filt.it), "gradGroup"] == i & 
+                                      nsc[eval(filt.it), "enrollment_status"] %in% c("F", "")
         
             # need to sum days across parameter-meeting enrollments b/c institutions split enrollments differently
             it <- ddply(nsc[!is.na(nsc$e.days), c("id", "i.t", "e.days")], c("id", "i.t"), summarise, 
@@ -198,8 +198,8 @@ recY_noGrad <- expression(nsc$record_found_y.n == "Y" & is.na(nsc$graduation_dat
        nsc[eval(filt.pe), "p.e"] <- nsc[eval(filt.pe), "i.t"] == TRUE &
                                       nsc[eval(filt.pe), "enrollment_begin"] < (i + 1)*10000 + 501 & 
                                       nsc[eval(filt.pe), "enrollment_end"] > (i + 1)*10000 + 301 & 
-                                      nsc[eval(filt.pe), "gradGroup"] == i #& 
-                                      #nsc[eval(filt.pe), "enrollment_status"] %in% c("F", "Q", "")
+                                      nsc[eval(filt.pe), "gradGroup"] == i & 
+                                      nsc[eval(filt.pe), "enrollment_status"] %in% c("F", "Q", "")
 
 
             pe <- ddply(nsc[!is.na(nsc$e.days), c("id", "p.e", "e.days")], c("id", "p.e"), summarise, 
