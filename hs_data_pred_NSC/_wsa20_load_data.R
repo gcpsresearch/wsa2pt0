@@ -104,7 +104,7 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "spedCatMod_H1", "spedCatSev_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
             "ss_totSCsq", "schl_LAcrctsq", "schl_MAcrctsq", "schl_RDcrctsq", "schl_fg", "schl_fsl",
-            "schl_sei_all", "schl_SCcrctsq", "p.e", "ap.t","ib.t","ontimeGrad",  "cum.gpa", "ps.t" )
+            "schl_sei_all", "schl_SCcrctsq", "p.e", "ap.t","ib.t",  "cum.gpa", "ps.t" )
 
 zoned <- c("zoned_school_E", "zoned_school_name_E")
 
@@ -124,7 +124,7 @@ factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1",
              "gft_H1", "sep_index_H1", "gini_index_H1", "psr",
              "ap_ib_pass_from8th_H1", "gft_from8th_H1", "psat_collReady", 
              "retained_from04", "female", "black", "hispanic", "other", 
-             "frl_H1", "lep_H1", "repgrd_H1", "p.e","ontimeGrad",
+             "frl_H1", "lep_H1", "repgrd_H1", "p.e",
              "ap.t","ib.t", "cum.gpa","ps.t")
 
 disc <- c("dsevmx_H1", "dsevmn_H1", "drate_H1")
@@ -136,6 +136,7 @@ factorconvert <- function(f){as.numeric (levels (f))[f]}
 vplayout <- function(x, y)
   viewport(layout.pos.row = x, layout.pos.col = y)
 #==============================================================================
+load("S:/Superintendent/Private/Strategy & Performance/ResearchEvaluation/Research Projects/RaisngAchClsngGap/data/prep/act_apib_gpa_sat_nsc.RData")
 
 for (p in 11:11) {
   
@@ -322,201 +323,8 @@ if(p.grd > 9) {
       which(names(dfm) == "psat_scoreWR")] <- NA
 }
 
-#========================#
-### Load the NSC data ####
-#========================#
-
-nsc <- read.csv(paste0(path, "\\Research Projects\\NSC Student Tracker\\", 
-                       "NSC StudentTracker_2014.10_2014Graduates\\received\\", 
-                       "1302550hs_10001139-28963-DETAIL-EFFDT-20141126-RUNDT-20141204.csv"),
-                sep = ",", header = TRUE)
-
-nsc <- case.cols("nsc")
-
-# change NA enrollment begin and end dates so can't count within enrollment periods
-nsc[is.na(nsc$enrollment_begin), "enrollment_begin" ] <- 0
-nsc[is.na(nsc$enrollment_end), "enrollment_end" ] <- 0
-
-# keep students graduating in cohort years and assign cohort
-nsc$cohort <- NA
-
-for (i in 1:yrs) {
-  
-  nsc[nsc$high_school_grad_date > (cohortYear_shrt[i] - 1)*10000 + 0801 & 
-        nsc$high_school_grad_date < cohortYear_shrt[i]*10000 + 0731, dim(nsc)[2]] <- cohortYear_shrt[i]
-}
-
-
-
-# (F)ull-time, (H)alf-time, (L)ess than half-time, (Q) 3/4 time, 
-#   (A) Leave of absence, (W)ithdrawn, (D)eceased
-#   from: http://www.studentclearinghouse.org/colleges/files/ST_DetailReportGuide.pdf
-
-# create gcps id
-nsc[,1] <- as.character(nsc[,1])
-nsc$id <- as.numeric(substr(nsc[,1], 1, nchar(nsc[,1]) - 1))
-
-nsc <- nsc[!is.na(nsc$cohort), ]
-
-# create immed.transition and persist.enroll variables
-
-nsc$i.t <- FALSE
-nsc$p.e1 <- FALSE
-#   nsc$p.e2 <- FALSE
-#   nsc$p.e3 <- FALSE
-
-
-
-for (i in 1:yrs) {
-  
-  nsc[nsc$i.t == FALSE, "i.t"] <- nsc[nsc$i.t == FALSE, "enrollment_begin"] < cohortYear_shrt[i]*10000 + 1101 & 
-    nsc[nsc$i.t == FALSE, "enrollment_end"] > cohortYear_shrt[i]*10000 + 915 & 
-    nsc[nsc$i.t == FALSE, "cohort"] == cohortYear_shrt[i] #& 
-    nsc[nsc$i.t == FALSE, "enrollment_status"] == "F"
-  
-  #     nsc[nsc$i.t == FALSE, "i.t"] <- as.numeric(nsc[nsc$i.t == FALSE, "enrollment_begin"]) < cohortYear_shrt[i]*10000 + 1231 & 
-  #                    as.numeric(nsc[nsc$i.t == FALSE, "enrollment_begin"]) > cohortYear_shrt[i]*10000 + 0801
-  #                    nsc[nsc$i.t == FALSE, "cohort"] == cohortYear_shrt[i] 
-  #     
-  it <- ddply(nsc[, c("id", "i.t")], "id", summarise, 
-              immed.t = sum(i.t))
-  it$i.t <- it$immed.t > 0
-  nsc <- nsc[, -(which(names(nsc) %in% c("i.t")))]
-  
-  nsc <- merge(nsc, it[, c(1, 3)], by.x = "id", by.y = "id", all.x = TRUE)
-  
-  nsc[nsc$p.e1 == FALSE, "p.e1"] <- nsc[nsc$p.e1 == FALSE, "i.t"] == TRUE & 
-    nsc[nsc$p.e1 == FALSE, "enrollment_begin"] < (cohortYear_shrt[i] + 1)*10000 + 501 & 
-    nsc[nsc$p.e1 == FALSE, "enrollment_end"] > (cohortYear_shrt[i] + 1)*10000 + 301 & 
-    nsc[nsc$p.e1 == FALSE, "cohort"] == cohortYear_shrt[i] & 
-    nsc[nsc$p.e1 == FALSE, "enrollment_status"] %in% c("F", "Q")
-  
-}
-
-mrg <- ddply(nsc[, c("id", "p.e1", 
-                     #"p.e2", "p.e3", 
-                     "i.t")], "id", summarise, 
-             pe1 = sum(p.e1), 
-             #                    pe2 = sum(p.e2), 
-             #                    pe3 = sum(p.e3), 
-             i.t = sum(i.t))
-
-mrg$p.e <- mrg$pe1 >= 1 #& mrg$pe2 == 1 & mrg$pe3 == 1
-
-nsc <- merge(nsc, mrg[, c("id", "i.t", "p.e")], by.x = "id", by.y = "id", all.x = TRUE)
-colnames(nsc)[which(names(nsc) == "i.t.x")] <- "i.t"
-
-nsc <- unique(nsc[, c("id", "first_name", "middle_name", "last_name", 
-                      "high_school_grad_date", "cohort", "i.t", "p.e")])
-
-nsc.model <- nsc[, c("id","cohort" ,"i.t", "p.e")]
-
-
-
-#======================#
-#### get AP/IB data ####
-#======================#
-
-# AP Exam of 3+ or A or B average in IB courses with >= 1.0 credits earned
-
-ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
-
-
-# ib courses
-ib.link <- sqlQuery(ma_ch, paste0("
-                                  SELECT  [COURSE]
-                                  ,[LONGTITLE]
-                                  FROM [GSDR].[GEMS].[SASI_ACRS]
-                                  WHERE FTE_TYPE = 'B'
-                                  "))
-
-ib.link <- case.cols("ib.link")
-
-
-gsdr.ib <- sqlQuery(ma_ch, paste0("
-                                  SELECT [PERMNUM]
-                                  ,[SCHOOL_YEAR]
-                                  ,[COURSE]
-                                  ,[CREDIT_EARNED]
-                                  ,[MARK_NUMERIC]
-                                  FROM   [GSDR].[GEMS].[SDRD_HIST]
-                                  WHERE  [SCHOOL_YEAR] >=", cohortYear_shrt[1] - 3, " and 
-                                  [SCHOOL_YEAR] <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
-                                  cast(CREDIT_EARNED as int) > 0
-                                  "))
-gsdr.ib <- case.cols("gsdr.ib")
-gsdr.ib <- merge(gsdr.ib, ib.link, by.x = "course", by.y = "course")
-
-names(gsdr.ib)[which(names(gsdr.ib) == "permnum")] <- "id"
-gsdr.ib$mark_numeric <- as.character(gsdr.ib$mark_numeric)
-gsdr.ib$mark_numeric <- as.numeric(gsdr.ib$mark_numeric)
-
-gsdr.ib.agg <- ddply(gsdr.ib[, c("id", "mark_numeric", "credit_earned")], "id", summarise, 
-                     wtdMk  = sum(mark_numeric*credit_earned*.001),
-                     creds = sum(credit_earned*.001))
-
-gsdr.ib.agg$mark <- gsdr.ib.agg$wtdMk/gsdr.ib.agg$creds
-gsdr.ib.agg$ib.t2 <- gsdr.ib.agg$mark >= 80 & gsdr.ib.agg$creds >= 1
-
-
-ib <- sqlQuery(ma_ch, paste0("
-                             SELECT [permnum]
-                             ,[grade]
-                             ,[school_year]
-                             ,[term]
-                             ,[course]
-                             ,[course_name]
-                             ,[mark]
-                             ,[credit_attempted]
-                             ,[credit_earned]
-                             ,[course_identifier]
-                             FROM [ResearchAndEvaluation].[dbo].[APCourses]
-                             WHERE school_year >=", cohortYear_shrt[1] - 3, " and
-                             school_year <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
-                             course_identifier = 'I' and 
-                             credit_earned > 0
-                             "))
-
-ib <- case.cols("ib")
-names(ib)[which(names(ib) == "permnum")] <- "id"
-ib$mark <- as.character(ib$mark)
-ib[ib$mark == "AUD", "mark"] <- "0"
-ib$mark <- as.numeric(ib$mark)
-
-ib.agg <- ddply(ib[, c("id", "mark", "credit_earned")], "id", summarise, 
-                wtdMk  = sum(mark*credit_earned),
-                creds = sum(credit_earned))
-
-ib.agg$mark <- ib.agg$wtdMk/ib.agg$creds
-ib.agg$ib.t <- ib.agg$mark >= 80 & ib.agg$creds >= 1
-
-
-# ap exams; uses "- 4" to get back to 8th grade for earliest cohort
-ap <- sqlQuery(ma_ch, paste0("
-
-            SELECT [STUNUMB]
-                  ,[TEST_KEY]
-                  ,[GRADE]
-                  ,[EXAM_ADMIN_DATE]
-                  ,[SCORE]
-                  ,[SCHOOL_YEAR]
-              FROM [Assessment].[dbo].[TEST_STU_APP]
-              WHERE SCHOOL_YEAR >=", cohortYear_shrt[1] - 4, " and 
-                    SCHOOL_YEAR <=", cohortYear_shrt[length(cohortYear_shrt)], " and 
-                    SCORE is not null and 
-                    SCORE != 0
-        "))
-
-ap <- case.cols("ap")
-names(ap)[which(names(ap) == "stunumb")] <- "id"
-
-ap.agg <- ddply(ap[, c("id", "score")], "id", summarise, 
-                mxScr  = max(score))
-
-ap.agg$ap.t <- ap.agg$mxScr >= 3
-
-odbcClose(ma_ch)
-
+#### LOAD DUAL ENROLLMENT DATA ####
+####===========================####
 ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 
 dual <- sqlQuery(ma_ch, paste0("
@@ -579,8 +387,8 @@ dfm$p.e[is.na(dfm$p.e)] <- FALSE
 nums <- names(dfm[, sapply(dfm, function(x) class(x) %in% 
                              c("numeric", "integer"))])
 
-save.image("H:/wsa2.0/data/prep/wsa2pt0_18mar2015.RData")
-}
+#save.image("H:/wsa2.0/data/prep/wsa2pt0_18mar2015.RData")
+
 #=====================================================================================#
 
 # check all kids enrolled in E year
@@ -724,7 +532,8 @@ stopifnot(dim(train[, predVars])[2] -
 
 trainX <-train[, predVars]
 # remove if complete cases subset has constant variables
-rmv <- which(apply(trainX[complete.cases(trainX), ], 2, sd) == 0)
+#rmv <- which(apply(trainX, 2, sd) == 0)
+rmv <- which(apply(trainX, 2, function(x) sd(x, na.rm = TRUE)) == 0)
 
 if(sum(rmv) == 0) {
   trainX$rmv <- 1
@@ -737,7 +546,7 @@ preProcValues1 <- preProcess(trainX[, -rmv],
                              method = c("center", "scale", "knnImpute"), 
                              k = 5, 
                              knnsummary = mean,
-                             fudge = .01)
+                             fudge = .1)
 
 preProcValues2 <- preProcess(trainX[, -rmv], 
                              method = c("knnImpute"), 
