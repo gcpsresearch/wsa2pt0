@@ -127,7 +127,8 @@ global sem1		=  90						// set length of first semester
 	global		extract			"0"		// extracts separate tables from ODS; 
 										// everything is saved for future use 
 										// so set to "0"
-	global		calc			"1"
+	global		calc			"0"
+	global 		merge_all1		"0"
 	global 		merge_all		"1"		// merges ODS-queried attendance, 
 										// behavioral, CRCT data for ms analyses
 	global		scoring			"0"
@@ -1480,10 +1481,10 @@ rename `v' `v'_`yr'
 		local hy3 = ${histyr3} //09
 		local hy2 = ${histyr2} //10
 		local hy1 = ${histyr1} //11
-		*local ey  = ${evalyr} // 12
+		local ey  = ${evalyr} // 12
 
 		
-		foreach yr in `hy3' `hy2' `hy1'{ //`ey' {
+		foreach yr in `hy3' `hy2' `hy1' `ey' {
 				if (`yr' < 10) {			//just deals with 2 vs 1 digit
 					gen grade_200`yr' = .
 				}
@@ -1907,9 +1908,9 @@ use data/orig/histyr_hs, clear
 		
 						
 	save data/prep/hs_model, replace
-	
+
 	use data/prep/hs_model, clear
-	
+
 	tempfile modeling
 	save `modeling', replace
 	
@@ -1917,9 +1918,14 @@ use data/orig/histyr_hs, clear
 	*hist core_pseudo_gpa1011, by( grade_2011) addplot(pci 0 83 .05 83)
 
 	
-	forval v =8/11 {
+	forval v =8/12 { //8/11 originally
 	local up = `v' + 1
 	local down = `v' - 1
+	
+	if (`v' == 12) {
+	keep if grade_20${evalyr} == `v' & daysenrolled_${histyr1}${evalyr} !=.
+	}
+	
 	
 	* historic year grades of 9-11
 	if inlist(`v',9, 10, 11) {
@@ -1931,7 +1937,7 @@ use data/orig/histyr_hs, clear
 	* historic year grades < 9
 	if (`v' < 9) {
 	keep if grade_${histyr2}${histyr1} == `v'
-		drop grade_20${histyr1}
+		*drop grade_20${histyr1}
 	}
 	gen ontimeGrad = yearstograd == 4 & yearstograd != . & grad == 1
 
@@ -1943,7 +1949,7 @@ use data/orig/histyr_hs, clear
 			specialeducationprimaryarea_${histyr1}${evalyr} /// 
 			altschoolindicator_${histyr1}${evalyr} giftedindicator_${histyr1}${evalyr} ///
 			repeatinggradeindicator_${histyr1}${evalyr} //daysabsent_${histyr1}${evalyr}
-			
+
 	gen pabs_${histyr2}${histyr1} = ///
 			daysabsent_${histyr2}${histyr1}/daysenrolled_${histyr2}${histyr1}
 	gen pabs_${histyr1}${evalyr} = ///
@@ -1957,7 +1963,7 @@ use data/orig/histyr_hs, clear
 			primarylanguage_${histyr2}${histyr1} altschool ///
 			daysenrolled_${histyr2}${histyr1} daysabsent_${histyr2}${histyr1} disc_enr ///
 			sequence iss_oss_days num_enr schoolyear grade_${histyr2}${histyr1} ///
-			specialeducation
+			grade_${histyr1}${evalyr} specialeducation
 		
 	gen female if gender != "" = gender == "Female"
 
@@ -1977,31 +1983,31 @@ use data/orig/histyr_hs, clear
 
 		drop gender ethnicity freereduced limitedenglish repeating giftedind ///
 				date9thgrade graduationdate yearstograd giftedind gft
-				
+		
 		foreach var of varlist* {
 		
 			//next yr
 			rename `var' `=regexr("`var'", "20${nxtyr}", "_N")'
 		
 		}
-	
+
 		foreach var of varlist* {
-		
+
 			//eval yr
 			local ev =  "_${histyr1}${evalyr}|_20${evalyr}|_${evalyr}|" + ///
 						"${histyr1}${evalyr}|20${histyr1}20${evalyr}|" + ///
 						"20${evalyr}|${evalyr}"			
-			
+	
 			rename `var' `=regexr("`var'", "`ev'", "_E")'
 		}
-			
+
 		foreach var of varlist* {
 		
 			//hist yr 1
 			local hs1 =  "_${histyr2}${histyr1}|_20${histyr2}20${histyr1}|" + ///
 						 "_20${histyr1}|_${histyr1}|${histyr2}${histyr1}|" + ///
 						 "20${histyr2}20${histyr1}|20${histyr1}|${histyr1}"			
-			
+	
 			rename `var' `=regexr("`var'", "`hs1'", "_H1")'
 		}
 		
@@ -2010,17 +2016,18 @@ use data/orig/histyr_hs, clear
 		//hist yr 2		
 			rename `var' `=regexr("`var'", "20${histyr2}", "_H2")'
 		}
-		
+
 		foreach var of varlist* {		
 		//hist yr 3	
 			rename `var' `=regexr("`var'", "20${histyr3}", "_H3")'
 		}
-		
-/*	if (`v' == 12) {				
+
+	if (`v' == 12) {				
 	preserve
 		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
 	restore
-*/				
+	}
+		
 	if (`v' == 11) {				
 	preserve
 		drop if startyear_grade_E ==.
@@ -2041,12 +2048,13 @@ use data/orig/histyr_hs, clear
 		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
 
 	}
-		
+
 		use `modeling', clear
-	
-  }
+
+    }
   
-}
+ }
+
 	
 if $scoring==1 {
 * SCORED DATASET
