@@ -127,7 +127,7 @@ global sem1		=  90						// set length of first semester
 	global		extract			"0"		// extracts separate tables from ODS; 
 										// everything is saved for future use 
 										// so set to "0"
-	global		calc			"0"
+	global		calc			"1"
 	global 		merge_all		"1"		// merges ODS-queried attendance, 
 										// behavioral, CRCT data for ms analyses
 	global		scoring			"0"
@@ -735,7 +735,7 @@ ${save} data/prep/crct_final_hs, replace
 		odbc load, clear exec	("
 			SELECT	* 
 			FROM	[Predictive_Analytics].[PAVIEW2].[v_Student_Course_History_DETAIL]
-			WHERE 	SchoolYear >= 20${histyr1} and
+			WHERE 	SchoolYear >= 20${histyr5} and
 					SchoolYear <= 20${evalyr} and 
 					Grade in ('03', '04', '05', '06', '07', '08', '09', '10', '11', '12')
 					")
@@ -1469,6 +1469,7 @@ rename `v' `v'_`yr'
 			gen yr9th = year(_dt9th) + 1 // is year ending
 			gen yr10th = yr9th + 1
 			gen yr11th = yr9th + 2
+			gen yr12th = yr9th + 3
 			keep if id > 100000 // filters impossible GCPS student IDs
 				keep id yr*
 				
@@ -1479,9 +1480,10 @@ rename `v' `v'_`yr'
 		local hy3 = ${histyr3} //09
 		local hy2 = ${histyr2} //10
 		local hy1 = ${histyr1} //11
+		*local ey  = ${evalyr} // 12
 
 		
-		foreach yr in `hy3' `hy2' `hy1' {
+		foreach yr in `hy3' `hy2' `hy1'{ //`ey' {
 				if (`yr' < 10) {			//just deals with 2 vs 1 digit
 					gen grade_200`yr' = .
 				}
@@ -1489,7 +1491,7 @@ rename `v' `v'_`yr'
 					gen grade_20`yr' = .
 				} //END IF gen
 			
-			forval grd = 9/11 {
+			forval grd = 9/12 {
 				if (`yr' < 10) {
 					replace grade_200`yr' = `grd' - (yr`grd'th - 200`yr')
 				} 
@@ -1596,8 +1598,8 @@ preserve
 	
 	* first prep and get proportion of "course-completion" reqs met
                  * core_ind + subject
-                         * end of 12th: 4 ELA, 4 MA, 4 SC, 3 SS  = 15; 23        -15 = 8         other credits
-                         * end of 11th: 3 ELA, 3 MA, 3 SC, 2 SS  = 11; 17.25     -11 = 6.25      other credits
+                         * end of 12th: 4 ELA, 4 MA, 4 SC, 3 SS  = 15; 23        - 15 = 8         other credits
+                         * end of 11th: 3 ELA, 3 MA, 3 SC, 2 SS  = 11; 17.25     - 11 = 6.25      other credits
                          * end of 10th: 2 ELA, 2 MA, 2 SC, 1 SS  =  7; 11.5      - 7 = 4.5       other credits
                          * end of 9th:  1 ELA, 1 MA, 1 SC        =  3; 5.75      - 3 = 2.75      other credits
 	
@@ -1629,10 +1631,10 @@ preserve
 								gen _ma = ma
 								gen _sc = sc
 								gen _ss = ss
-									replace _la = 3 if la >= 4
-									replace _ma = 3 if ma >= 4
-									replace _sc = 3 if sc >= 4
-									replace _ss = 2 if ss >= 3
+									replace _la = 4 if la >= 4
+									replace _ma = 4 if ma >= 4
+									replace _sc = 4 if sc >= 4
+									replace _ss = 3 if ss >= 3
                                  gen percCore = (_la/4*.25 + _ma/4*.25 + _sc/4*.25 + _ss/3*.25)
                                  gen percOth = .
 
@@ -1956,7 +1958,7 @@ use data/orig/histyr_hs, clear
 			daysenrolled_${histyr2}${histyr1} daysabsent_${histyr2}${histyr1} disc_enr ///
 			sequence iss_oss_days num_enr schoolyear grade_${histyr2}${histyr1} ///
 			specialeducation
-stop			
+		
 	gen female if gender != "" = gender == "Female"
 
 	gen black if ethnicity_${histyr2}${histyr1} != "" = ///
@@ -1982,7 +1984,7 @@ stop
 			rename `var' `=regexr("`var'", "20${nxtyr}", "_N")'
 		
 		}
-		
+	
 		foreach var of varlist* {
 		
 			//eval yr
@@ -2014,11 +2016,11 @@ stop
 			rename `var' `=regexr("`var'", "20${histyr3}", "_H3")'
 		}
 		
-	if (`v' == 12) {				
+/*	if (`v' == 12) {				
 	preserve
 		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
 	restore
-				
+*/				
 	if (`v' == 11) {				
 	preserve
 		drop if startyear_grade_E ==.
