@@ -1,13 +1,15 @@
 # Revising WSA work to incorporate NSC persistent enrollment as new outcome var
 #
 #
+# !!start line 313
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.03.13 by Roland Richard
+#   last updated  2015.03.31 by James Appleton
 
 #========================#
 # Setup/Load Packages ####
 #========================#
-
+rm(list = ls())
+gc()
 ####
 packages <- c("plyr", "dplyr", "reshape", "reshape2", "ggplot2", "grid", "catspec",
               "RODBC", "foreign","ggthemes", "grid", "gridExtra", "doParallel", 
@@ -19,9 +21,9 @@ path <- readLines("c:\\current_path.txt")
 
 # set directories
 setwd (paste(path,                        
-             "\\Research Projects\\RaisngAchClsngGap",sep=""))
+             "\\RBES\\WSA 2.0\\student.success.factor",sep=""))
 maindir <- paste(path,                        
-                 "\\Research Projects\\RaisngAchClsngGap",sep="")
+                 "\\RBES\\WSA 2.0\\student.success.factor", sep = "")
 dir ()
 
 # functions
@@ -79,6 +81,12 @@ startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
 cl <- makeCluster(detectCores())
 registerDoParallel(cl, cores = detectCores())
 
+# matrix to deal with post-secondary naming conventions
+ps.m <- data.frame(cbind(1:13, c(1:12, "PS"), c(paste0(1:12, 
+                                                       c("st", "nd", "rd", rep("th", 9))), 
+                                                       "PostSec")), stringsAsFactors = FALSE)
+  ps.m[, 1] <- as.numeric(ps.m[, 1])
+
 #============================================================#
 # Load original predictive modeling data (w/o OTPSR var.) ####
 #============================================================#
@@ -117,6 +125,8 @@ g10 <-    c("psat_scoreCR", "psat_scoreMA", "psat_scoreWR", "psat_collReady", "l
 
 g11 <-    g10
 
+g12 <-    g10
+
 factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1", 
              "loc_H1", "mafail_H1", "scfail_H1", "ssfail_H1", "corefail_H1", 
              "lafail_from8th_H1", "mafail_from8th_H1", "scfail_from8th_H1", 
@@ -135,8 +145,25 @@ factorconvert <- function(f){as.numeric (levels (f))[f]}
 # vplayout
 vplayout <- function(x, y)
   viewport(layout.pos.row = x, layout.pos.col = y)
+
+
+
 #==============================================================================
-load("S:/Superintendent/Private/Strategy & Performance/ResearchEvaluation/Research Projects/RaisngAchClsngGap/data/prep/act_apib_gpa_sat_nsc.RData")
+# load post-secondary transition and persistence data
+            e2 <- new.env()
+            ws <- "act_apib_gpa_sat_nsc.RData"
+            # convert needed .RData -> .rdb/.rdx
+            e = local({load(paste0("S:/Superintendent/Private/Strategy & Performance", 
+                                   "/ResearchEvaluation/Research Projects/", 
+                                   "RaisngAchClsngGap/data/prep/", ws))
+                       ; environment()})
+            tools:::makeLazyLoadDB(e, ws)
+            lazyLoad(ws, envir = e2)
+    lapply(c("nsc.model", "ap.agg", "ib.agg"), function(x) {
+      assign(x, get(x, envir = e2), envir = .GlobalEnv)
+    })
+  rm(e, e2)
+  gc()
 
 for (p in 11:11) {
   
@@ -160,7 +187,7 @@ for (p in 11:11) {
 
   #create on-time, post-secondary-ready indicator (OTPSR.Grad)
   
-  df$psr <- 0 
+  df$psr <- 0
   
   # use best prior predictors if exist and convert to evalyr equivalents
   # remove unchangeable things (e.g., PSAT)
@@ -221,7 +248,7 @@ df[df[, which(names(df)=="ontimeGrad")] &
 
   } # END IF p.grd
 
-if (p.grd != 11) {
+if (p.grd != 11 & p.grd != 12) {
   
   
   # maybe make conditions vector and just run cases against it?  the below is really getting complex!!
@@ -289,20 +316,13 @@ if (p.grd != 11) {
   dim(df)[2] <- 1
 
 
-} # END IF p.grd != 11
-
-
+} # END IF p.grd != 11 & p.grd != 12
 
 # keep only variables for modeling
 dfm <- df[, which(names(df) %in% c(keep, get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
 names(df)[-which(names(df) %in% names(dfm))]
-
-# subset numeric variables for graphing
-nums <- names(dfm[, sapply(dfm, function(x) class(x) %in% 
-                             c("numeric", "integer"))])
-
 
 # check all kids enrolled in E year
 stopifnot(min(df$daysenrolled_E) > 0)
@@ -376,18 +396,12 @@ dfm <- data.frame(dfm)
 dfm <- dfm[, which(names(dfm) %in% c(keep, get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
-names(dfm)[-which(names(dfm) %in% names(dfm))]
+names(df)[-which(names(df) %in% names(dfm))]
 
 dfm$ap.t[is.na(dfm$ap.t)] <- FALSE
 dfm$ib.t[is.na(dfm$ib.t)] <- FALSE
-
 dfm$p.e[is.na(dfm$p.e)] <- FALSE
-
-# subset numeric variables for graphing
-nums <- names(dfm[, sapply(dfm, function(x) class(x) %in% 
-                             c("numeric", "integer"))])
-
-#save.image("H:/wsa2.0/data/prep/wsa2pt0_18mar2015.RData")
+dfm$ps.t[is.na(dfm$ps.t)] <- FALSE
 
 #=====================================================================================#
 
@@ -410,6 +424,14 @@ if(p.grd > 9) {
       which(names(dfm) == "psat_scoreWR")] <- NA
 }
 
+# subset numeric variables for graphing
+nums <- names(dfm[complete.cases(dfm), sapply(dfm, function(x) class(x) %in% 
+                             c("numeric", "integer", "logical") & 
+                             sum(is.na(x))/length(x) < .34)])
+
+
+save.image(paste0(maindir, "/data/prep/wsa2pt0.RData"))
+
 #=========
 # EXPLORE ####
 #=========
@@ -418,12 +440,15 @@ if(p.grd > 9) {
 
 ## The correlation matrix of the new data
 dfm.c <- dfm[, nums]
-dfm.c <- dfm.c[, -c(nearZeroVar(dfm.c), which(names(dfm.c) == "id"))]
+
+dfm.c <- dfm.c[, -c(nearZeroVar(dfm.c), which(names(dfm.c) == "id"), 
+                    grep("loc|school", 
+                             names(dfm)))]
 predCor <- cor(dfm.c, use = "pairwise.complete.obs")
 library(corrplot)
-pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-          "corrPlot.pdf", sep = ""), 
-    width = 13, height = 15)
+pdf(paste0(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+          "_corrPlot.pdf"), 
+    width = 17, height = 20)
 corrplot(predCor,
          order = "hclust", 
          type = "upper")
@@ -431,8 +456,8 @@ dev.off()
 
 require(grid)
 # examine univariate histograms; requires adjacent variables for looping
-pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-          "thUnivHists.pdf", sep = ""), 
+pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 2], 
+          "UnivHists.pdf", sep = ""), 
     width = 24, height = 18)
 
 dfn <- dfm[, which(names(dfm) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
@@ -492,8 +517,8 @@ for(i in 1:(ceiling(vs/7))) {
     print(h.1, vp = vplayout(k, 4))
     
   }
-  grid.text(paste("WSA 2.0 SSI", p.grd, "th", p.grd + 1, 
-                  "Predictor Distributions: ", 
+  grid.text(paste("WSA 2.0 SSI ", p.grd, "th", ps.m[p.grd + 1, 3], 
+                  " Predictor Distributions: ", 
                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
                           just = "centre"))
@@ -533,7 +558,8 @@ stopifnot(dim(train[, predVars])[2] -
 trainX <-train[, predVars]
 # remove if complete cases subset has constant variables
 #rmv <- which(apply(trainX, 2, sd) == 0)
-rmv <- which(apply(trainX, 2, function(x) sd(x, na.rm = TRUE)) == 0)
+rmv <- which(apply(trainX[complete.cases(trainX), ], 2, 
+                   function(x) sd(x, na.rm = TRUE)) == 0)
 
 if(sum(rmv) == 0) {
   trainX$rmv <- 1
@@ -562,7 +588,7 @@ trainFinal <- cbind(training[, c(predVars, "Class")])
 trainFinal80 <- cbind(training80[, c(predVars, "Class")])
 
 # save datasets for glm after the loops
-assign(paste0("trainFinal80.", p.grd, "th", p.grd + 1, "th"), trainFinal80)
+assign(paste0("trainFinal80.", p.grd, "th", ps.m[p.grd + 1, 3]), trainFinal80)
 
 #=========================
 # post-process histograms ####
@@ -570,8 +596,8 @@ assign(paste0("trainFinal80.", p.grd, "th", p.grd + 1, "th"), trainFinal80)
 
 require(grid)
 # examine univariate histograms; requires adjacent variables for looping
-pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-          "thUnivHistsPostProc.pdf", sep = ""), 
+pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3],  
+          "UnivHistsPostProc.pdf", sep = ""), 
     width = 24, height = 18)
 
 dfn <- training[, which(names(training) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
@@ -631,8 +657,8 @@ for(i in 1:(ceiling(vs/7))) {
     print(h.1, vp = vplayout(k, 4))
     
   }
-  grid.text(paste("WSA 2.0 SSI", p.grd, "th", p.grd + 1, 
-                  "Predictor Distributions: ", 
+  grid.text(paste("WSA 2.0 SSI", p.grd, "th", ps.m[p.grd + 1, 3], 
+                  " Predictor Distributions: ", 
                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
                           just = "centre"))
@@ -804,7 +830,7 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
                    trControl = ctrl)
   }
   
-  assign(paste0(ps[1,1], ".tuned.", p.grd, "th", p.grd + 1, "th"), mFull)
+  assign(paste0(ps[1,1], ".tuned.", p.grd, "th", ps.m[p.grd + 1, 3]), mFull)
   
   # Stop the clock!
   time <- proc.time() - ptm
@@ -815,8 +841,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   #==================
   
   if(ps[1, 2] != "")
-    sink(file = paste0(maindir, "\\results\\", p.grd, "th", p.grd + 1, 
-                       "th", as.character(ps[1, 1]), "Full", "Tuned.txt"),
+    sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                        as.character(ps[1, 1]), "Full", "Tuned.txt"),
          append = FALSE, split = TRUE)
   print(mFull)
   sink()
@@ -827,8 +853,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   
   if(ps[1, 2] != "") {
     
-    pdf(file = paste0(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-                      "th", as.character(ps[1,1]), "Full", "Tuned.pdf"),  
+    pdf(file = paste0(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                       as.character(ps[1,1]), "Full", "Tuned.pdf"),  
         width = 8, height = 8)
     trellis.par.set(caretTheme())
     t <- plot(mFull, 
@@ -849,8 +875,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   
   mPred <- predict(mFull, tst[, names(tst)[-which(names(tst) == "Class")]])
   
-  sink(file = paste(maindir, "\\results\\", p.grd, "th", p.grd + 1, 
-                    "th", as.character(ps[1,1]), "Full", "confusionMatrix.txt", sep = ""),
+  sink(file = paste(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3],
+                    as.character(ps[1,1]), "Full", "confusionMatrix.txt", sep = ""),
        append = FALSE, split = TRUE)
   Sys.time()
   cm <- confusionMatrix(mPred, tst$Class, positive = "Yes")
@@ -875,14 +901,14 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   assign(paste0(ps[1,1], ".probs"), final)
   
   # check calibration of probabilities
-  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-                   "th", ps[1,1], "Calibration_mFull.pdf", sep = ""),
+  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                   ps[1,1], "Calibration_mFull.pdf", sep = ""),
       width = 7, height = 7)
   calCurve <- calibration(Class ~ No, data = final)
   c <- xyplot(calCurve, auto.key = list(columns = 2), 
               main = paste0("Calibration of ", ps[1,1], " Model-based Probabilities: \nFailing to ", 
-                            "Graduate OT-PSR Against True Probabilities \n Predicting ",
-                            "from grade: ", p.grd, " to grade ", p.grd + 1))
+                            "Persist in Post-Secondary Against True Probabilities \n Predicting ",
+                            "from grade: ", p.grd, " to grade ", ps.m[p.grd + 1, 2])
   print(c)
   dev.off()
   
@@ -898,12 +924,12 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   
   rocObject
   
-  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-                   "th", ps[1,1], "ROCclassProbs.pdf", sep = ""),
+  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3],
+                    ps[1,1], "ROCclassProbs.pdf", sep = ""),
       width = 7, height = 7)
   plot(rocObject, print.thres = 0.50, 
        main = paste0(ps[1,1], " ROC Curve and .50 Threshold: ", 
-                     "from grade ", p.grd, " to grade ", p.grd + 1, "\n", 
+                     "from grade ", p.grd, " to grade ", ps.m[p.grd + 1, 2], "\n", 
                      paste0("Area under the curve = ", round(rocObject$auc, 2)))
   ) 
   print(rocObject)
@@ -912,12 +938,12 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   #===================================================
   # A Histogram of Class Probabilities by True Class ####
   #===================================================
-  png(filename = paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-                       "th", ps[1,1], "ProbSuccess.png", sep = ""),
+  png(filename = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                       ps[1,1], "ProbSuccess.png", sep = ""),
       width = 700, height = 700)
   h <- histogram(~mProbs$Yes|tst$Class,
-                 xlab = paste0(ps[1,1], " Probability of Success in ", p.grd + 1, 
-                               "th Grade"))
+                 xlab = paste0(ps[1,1], " Probability of Success in ", ps.m[p.grd + 1, 3], 
+                               " Grade"))
   print(h)
   dev.off()
   
@@ -932,8 +958,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
 require(ROCR)
 # first ROC
 
-pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-                 "th", "ROC_AUC_comparison.pdf", sep = ""),
+pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                 " ROC_AUC_comparison.pdf", sep = ""),
     width = 8, height = 6)
 
 j <- 1L
@@ -951,7 +977,7 @@ pred <- prediction(get(paste0(data[j,1], ".probs"))[3],
                    get(paste0(data[j,1], ".probs"))[1])
 perf <- performance(pred, measure = "tpr", x.measure = "fpr")
 plot(perf,  col = cols[j], 
-     main = paste0(p.grd, "th Grade Predicting ", p.grd + 1, "th", 
+     main = paste0(p.grd, "th Grade Predicting ", ps.m[p.grd + 1, 3], 
                    "\nROC Curves and AUC for ", 
                    length(unique(tuningPsSet[, 1])), 
                    " Tuned Models"))
@@ -968,8 +994,7 @@ add <- c(FALSE, TRUE, TRUE, TRUE, TRUE, TRUE)
 
 for(j in 2: length(unique(tuningPsSet[, 1]))) {
   
-  tuned <- get(paste0(data[j,1], ".tuned.", p.grd, "th", p.grd + 1, 
-                      "th"))
+  tuned <- get(paste0(data[j,1], ".tuned.", p.grd, "th", ps.m[p.grd + 1, 3]))
   aucs[j, ] <- c(paste0(data[j, 1]), max(tuned$results$ROC))
   
   pred <- prediction(get(paste0(data[j,1], ".probs"))[3], 
@@ -1003,8 +1028,8 @@ for(k in 1:length(unique(tuningPsSet[, 1]))) {
   m.times[k, ] <- get(paste0(data[k, 1], ".time"))[1:3]
 }
 
-sink(file = paste0(maindir, "\\results\\", p.grd, "th", p.grd + 1, 
-                   "th modeling time.txt"),
+sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                   " modeling time.txt"),
      append = FALSE, split = TRUE)
 
 # range of elapsed times
@@ -1037,8 +1062,7 @@ tunes <- data.frame(t(rep(NA, 3)))
 colnames(tunes) <- c("model", "parameter", "userTunePs")
 
 for(k in 1:length(dataTuned)) {
-  tuneObj <- get(paste0(dataTuned[k], ".tuned.", p.grd, "th", 
-                        p.grd + 1, "th"))
+  tuneObj <- get(paste0(dataTuned[k], ".tuned.", p.grd, "th", ps.m[p.grd + 1, 3]))
   pars <- t(rbind(names(tuneObj$bestTune), tuneObj$bestTune))
   pars <- cbind(rep(dataTuned[k], dim(tuneObj$bestTune)[2]), pars)
   
@@ -1168,8 +1192,8 @@ for (l in 2:length(fs.models)) {
   
   # save output and record time
   
-  sink(file = paste0(maindir, "\\results\\", p.grd, "th", p.grd + 1, 
-                     "th", wrappers[l, 2], "RFE.txt"),
+  sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                     wrappers[l, 2], "RFE.txt"),
        append = FALSE, split = TRUE)
   
   print(RFE)
@@ -1179,14 +1203,15 @@ for (l in 2:length(fs.models)) {
   # plot RFE results
   #-----------------*
   
-  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", p.grd + 1, 
-                   "th", wrappers[l, 1], "RFE.pdf", sep = ""),
+  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                   wrappers[l, 1], "RFE.pdf", sep = ""),
       width = 10, height = 7)
   
   rfePlot <- plot(RFE, 
                   main = paste0(wrappers[l, 3], " - Recursive Feature Elimination ", 
-                                "Results\n ", p.grd, "th Grade Predicting ", p.grd + 1, 
-                                "th Grade\nOn-Path, College/Career Readiness"),
+                                "Results\n ", p.grd, "th Grade Predicting Grade ", 
+                                ps.m[p.grd + 1, 2], 
+                                " \nOn-Path, College/Career Readiness"),
                   sub = paste0(paste0("\nTop 5 of the best (", 
                                       length(eval(parse(text =  wrappers[l, 4]))), 
                                       ") variables are: "),
@@ -1203,7 +1228,7 @@ for (l in 2:length(fs.models)) {
   dev.off()
   
   assign(paste0(wrappers[l, 2], "RFE"), RFE)
-  assign(paste0(wrappers[l, 2], "RFE.", p.grd, "th", p.grd + 1, "th"), RFE)
+  assign(paste0(wrappers[l, 2], "RFE.", p.grd, "th", ps.m[p.grd + 1, 3]), RFE)
   
   # Stop the clock!
   time <- proc.time() - ptm
@@ -1221,8 +1246,8 @@ for(m in 2:length(fs.models)) {
   r.times[m, ] <- get(paste0(wrappers[m, 1], "RFE.time"))[1:3]
 }
 
-sink(file = paste0(maindir, "\\results\\", p.grd, "th", p.grd + 1, 
-                   "th RFE time.txt"),
+sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+                   " RFE time.txt"),
      append = FALSE, split = TRUE)
 
 # range of elapsed times
@@ -1397,7 +1422,7 @@ if(max(lrRFE$results$ROC) >= .85) {
   bal.f <- bal.f[bal.f$probability == min(bal.f$probability), 
                  -(c(1, dim(bal.f)[2]))]
   
-  assign(paste0("bal.f", p.grd, "th", p.grd + 1, "th"), bal.f)
+  assign(paste0("bal.f", p.grd, "th", ps.m[p.grd + 1, 3]), bal.f)
   
   # multiple coeffs by progression matrix and filter first above .75
   bal <- as.data.frame(cbind(go.mns.b, exp(go.mns.b %*% go.coeffs) / 
@@ -1409,7 +1434,7 @@ if(max(lrRFE$results$ROC) >= .85) {
   bal.f <- bal.f[bal.f$probability == min(bal.f$probability), 
                  -(c(1, dim(bal.f)[2]))]
   
-  assign(paste0("bal.f", p.grd, "th", p.grd + 1, "th"), bal.f)
+  assign(paste0("bal.f", p.grd, "th", ps.m[p.grd + 1, 3]), bal.f)
 }
 
 
@@ -1612,7 +1637,7 @@ if (is.na(calMods[1])) {
 
 # sink models used by grade
 sink(file = paste0(maindir, "\\results\\calMods", p.grd, "th", 
-                   p.grd + 1, "th.txt"), append = FALSE, split = TRUE)
+                   ps.m[p.grd + 1, 3], ".txt"), append = FALSE, split = TRUE)
 
 print(fs.models[calMods])
 
@@ -1666,8 +1691,8 @@ names(final)[grep("as.numeric",
 
 # save copy of student scores
 write.csv(final, 
-          paste0(maindir, "\\results\\studentLevel_scoredProbs_", p.grd, "th", p.grd + 1, 
-                 "th.csv"), 
+          paste0(maindir, "\\results\\studentLevel_scoredProbs_", p.grd, "th", ps.m[p.grd + 1, 3], 
+                 ".csv"), 
           row.names = FALSE)
 
 final <- final[, -(grep("as.numeric|Yes", names(final)))]
@@ -1687,8 +1712,8 @@ final.schl <- final.schl[final.schl$N > 30, ]
 final.schl$diff <- round((final.schl$actual - final.schl$prob)*100, 1)
 
 write.csv(final.schl, 
-          paste0(maindir, "\\results\\scoredProbs_", p.grd, "th", p.grd + 1, 
-                 "th.csv"), 
+          paste0(maindir, "\\results\\scoredProbs_", p.grd, "th", ps.m[p.grd + 1, 3], 
+                 ".csv"), 
           row.names = FALSE)
 
 #=============================================
@@ -1706,7 +1731,7 @@ frpl12 <- frpl12[, c(1, 11)]
 
 final.mrg <- merge(final.schl, frpl12, by.x = "zoned_school_E", by.y = "loc_code", all.x = TRUE)
 
-assign(paste0("final.mrg", p.grd, "th", p.grd + 1, "th"), final.mrg)
+assign(paste0("final.mrg", p.grd, "th", ps.m[p.grd + 1, 3]), final.mrg)
 
 # plot %FRL & CCROTG %diff
 
@@ -1735,6 +1760,6 @@ sys.time <- gsub("-|:", "_", sys.time)
 
 save.image(paste0("S:/Superintendent/Private/Strategy & Performance/", 
                   "ResearchEvaluation/RBES/WSA 2.0/student.success.factor/data/", 
-                  "prep/", p.grd, "th", p.grd + 1, "th_", 
+                  "prep/", p.grd, "th", ps.m[p.grd + 1, 3], "_", 
                   sys.time, ".RData"))
 }
