@@ -103,8 +103,8 @@ dir ()
 keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA", 
             "ss_totRD", "ss_totSC", "mob_H1", "coreCumulGPA_H1", "lacourseCumulGPA_H1", 
             "macourseCumulGPA_H1", "fg", "fsl", "sei_all", "startyear_grade_E", "loc_H1", 
-            "lafail_H1", "mafail_H1", "scfail_H1", "zoned_school_E", "zoned_school_name_E", 
-            "ssfail_H1", "corefail_H1", "lafail_from8th_H1", "mafail_from8th_H1", "psr",
+            "lafail_H1", "mafail_H1", "scfail_H1", 
+            "ssfail_H1", "corefail_H1", "lafail_from8th_H1", "mafail_from8th_H1",
             "scfail_from8th_H1", "ssfail_from8th_H1", "corefail_from8th_H1", "gft_from8th_H1", 
             "retained_from04", "gft_H1", "gft_from8th_H1", "gft_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
@@ -114,28 +114,29 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "ss_totSCsq", "schl_LAcrctsq", "schl_MAcrctsq", "schl_RDcrctsq", "schl_fg", "schl_fsl",
             "schl_sei_all", "schl_SCcrctsq", "p.e", "ap.t","ib.t",  "cum.gpa", "ps.t" )
 
+evYr  <- "startyear_grade_E"
 zoned <- c("zoned_school_E", "zoned_school_name_E")
 
 g8 <-     ""
-g9 <-     c("la", "ma", "sc", "ss", "percCore", "percOth", "la", "ma", "sc", "ss", 
-            "percCore", "percOth", "ap_ib_pass_H1", "ap_ib_pass_from8th_H1")
+g9 <-     c("la", "ma", "sc", "ss", "percCore", "percOth", 
+            "ap_ib_pass_H1", "ap_ib_pass_from8th_H1")
 g10 <-    c("psat_scoreCR", "psat_scoreMA", "psat_scoreWR", "psat_collReady", "la", 
             "ma", "sc", "ss", "percCore", "percOth", "ap_ib_pass_H1", 
             "ap_ib_pass_from8th_H1")
 
-g11 <-    g10
+g11 <-    c(g10, "psr")
 
-g12 <-    g10
+g12 <-    g11
 
 factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1", 
              "loc_H1", "mafail_H1", "scfail_H1", "ssfail_H1", "corefail_H1", 
              "lafail_from8th_H1", "mafail_from8th_H1", "scfail_from8th_H1", 
              "ssfail_from8th_H1", "corefail_from8th_H1", "ap_ib_pass_H1", 
-             "gft_H1", "sep_index_H1", "gini_index_H1", "psr",
+             "gft_H1", "psr",
              "ap_ib_pass_from8th_H1", "gft_from8th_H1", "psat_collReady", 
              "retained_from04", "female", "black", "hispanic", "other", 
              "frl_H1", "lep_H1", "repgrd_H1", "p.e",
-             "ap.t","ib.t", "cum.gpa","ps.t")
+             "ap.t","ib.t","ps.t")
 
 disc <- c("dsevmx_H1", "dsevmn_H1", "drate_H1")
 
@@ -165,7 +166,7 @@ vplayout <- function(x, y)
   rm(e, e2)
   gc()
 
-for (p in 11:11) {
+for (p in 12:12) {
   
   #  for (yr in 2012:2013) {
   
@@ -187,7 +188,25 @@ for (p in 11:11) {
 
   #create on-time, post-secondary-ready indicator (OTPSR.Grad)
   
-  df$psr <- 0
+ 
+  
+         # SAT M and CR >= 520 OR
+  df$psr <- 
+  
+      ((!is.na(df[, which(names(df)=="scoreMA")]) & 
+          df[, which(names(df)=="scoreMA")] >= 520 & 
+          !is.na(df[, which(names(df)=="scoreVE")]) & 
+          df[, which(names(df)=="scoreVE")] >= 520) |
+       
+      # ACT E >= 18 and M and R >= 22 OR
+     (!is.na(df[, which(names(df)=="scoreaEN")]) & 
+          df[, which(names(df)=="scoreaEN")] >= 18 & 
+      !is.na(df[, which(names(df)=="scoreaMA")]) & 
+          df[, which(names(df)=="scoreaMA")] >= 22 & 
+      !is.na(df[, which(names(df)=="scoreaRD")]) & 
+          df[, which(names(df)=="scoreaRD")] >= 22))
+  
+    df$psr <- ifelse(df$psr == TRUE, 1, 0)
   
   # use best prior predictors if exist and convert to evalyr equivalents
   # remove unchangeable things (e.g., PSAT)
@@ -325,7 +344,7 @@ dfm <- df[, which(names(df) %in% c(keep, get(paste("g", p.grd, sep = ""))))]
 names(df)[-which(names(df) %in% names(dfm))]
 
 # check all kids enrolled in E year
-stopifnot(min(df$daysenrolled_E) > 0)
+stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
 
 # set NA for disciplinary incidents to 0
 dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -347,6 +366,8 @@ if(p.grd > 9) {
 ####===========================####
 ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
 
+ 
+
 dual <- sqlQuery(ma_ch, paste0("
                                SELECT distinct t1.[SCHOOL_YEAR]
                                ,t2.[TITLE]
@@ -357,7 +378,7 @@ dual <- sqlQuery(ma_ch, paste0("
                                ,t2.[CREDVALUE]
                                FROM [GSDR].[GEMS].[SDRD_HIST] t1 LEFT JOIN [GSDR].[GEMS].[SASI_ACRS] t2 ON 
                                t1.COURSE = t2.COURSE
-                               WHERE t1.SCHOOL_YEAR >= 2012 and
+                               WHERE t1.SCHOOL_YEAR <= ", cohortYear_shrt[1], " and
                                t2.LONGTITLE LIKE 'PS %'
                                "))
 odbcClose(ma_ch)
@@ -406,7 +427,7 @@ dfm$ps.t[is.na(dfm$ps.t)] <- FALSE
 #=====================================================================================#
 
 # check all kids enrolled in E year
-stopifnot(min(df$daysenrolled_E) > 0)
+stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
 
 # set NA for disciplinary incidents to 0
 dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -556,6 +577,8 @@ stopifnot(dim(train[, predVars])[2] -
             max(apply(train[, predVars], 1, function(x) sum(is.na(x)))) > 0)
 
 trainX <-train[, predVars]
+
+
 # remove if complete cases subset has constant variables
 #rmv <- which(apply(trainX, 2, sd) == 0)
 rmv <- which(apply(trainX[complete.cases(trainX), ], 2, 
@@ -586,6 +609,7 @@ training <- cbind(training, train[, -which(names(train) %in% names(training))])
 training80 <- cbind(training80, train[, -which(names(train) %in% names(training80))])
 trainFinal <- cbind(training[, c(predVars, "Class")])
 trainFinal80 <- cbind(training80[, c(predVars, "Class")])
+training80 <- complete.cases(training80)
 
 # save datasets for glm after the loops
 assign(paste0("trainFinal80.", p.grd, "th", ps.m[p.grd + 1, 3]), trainFinal80)
@@ -693,7 +717,8 @@ nums3 <- names(train[, sapply(train, function(x) class(x) %in%
 std <- min(trainFinal$spedCatSev_H1)
 nzv <- trainFinal[trainFinal$spedCatSev_H1 == std, nums2]
 nzv <- nzv[, -(nearZeroVar(nzv))]
-nzv.corr <- nzv[, -(findCorrelation(cor(nzv), cutoff = .85, verbose = FALSE))]
+nzv.corr <- nzv[, -(findCorrelation(cor(nzv, use = "pairwise.complete.obs"), 
+                                    cutoff = .85, verbose = FALSE))]
 
 nzv <- cbind(nzv, trainFinal[trainFinal$spedCatSev_H1 == std, 
                              which(names(trainFinal) == "Class")])
@@ -908,7 +933,7 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   c <- xyplot(calCurve, auto.key = list(columns = 2), 
               main = paste0("Calibration of ", ps[1,1], " Model-based Probabilities: \nFailing to ", 
                             "Persist in Post-Secondary Against True Probabilities \n Predicting ",
-                            "from grade: ", p.grd, " to grade ", ps.m[p.grd + 1, 2])
+                            "from grade: ", p.grd, " to grade ", ps.m[p.grd + 1, 2]))
   print(c)
   dev.off()
   
