@@ -1,10 +1,11 @@
-set more off
+set more off, permanently
 log close _all
 clear all
 
 /* updates
-!! 2014.12.16 - changed to MCPS 7-keys approach
-					see: S:\Superintendent\Private\Strategy & Performance\ResearchEvaluation\Research Projects\RaisngAchClsngGap
+2015.04.03	- added 12th predicting 13th (post-sec persist from NSC)
+
+2015.03.13	- changed some census variables to gini and deprivation
 
 2014.08.14	- added indicator of the severity of the SPED primary area:
 
@@ -34,13 +35,9 @@ clear all
 	----------------------------------------
 	
 	OUTCOME:
-	- On-time graduation [(date entered 9th + 4 years) or 
-						  (date entered GCPS + (12 - grade entered) years)]
-	- SAT (520 on CR & M) or 
-	- ACT score (>=22 in M & R & >= 18 in E)
-	- HS GPA >=83
-	
-	
+	- National Student Clearinghouse (NSC) indicated immediate post-secondary
+		enrollment and persistence
+		
 	STUDENT-LEVEL INDICATORS:
 	*background/"fixed"
 	- age (overage) 
@@ -64,6 +61,11 @@ clear all
 	- engagement perceptions (SEI)
 	- LEP services
 	- SPED services
+	??- On-time graduation [(date entered 9th + 4 years) or 
+						  (date entered GCPS + (12 - grade entered) years)]
+	- post-secondary ready (psr)
+		- SAT (520 on CR & M) or 
+		- ACT score (>=22 in M & R & >= 18 in E)
 	
 	SCHOOL-LEVEL INDICATORS:
 	- %FRL
@@ -76,10 +78,9 @@ clear all
 	
 		
 	-Created by:		2013.12.19 by James Appleton
-	-Last revised: 		2015.03.16 by Roland Richard
 	
 *******************************************************************************/
-	global		twelfth		"1"		// set to 1 if modeling 11th grd to 12th grd
+
 ************************************* globals *********************************
 infix str path 1-500 using "c:\current_path.txt", clear
 local path = trim(path)
@@ -128,15 +129,14 @@ global sem1		=  90						// set length of first semester
 										// everything is saved for future use 
 										// so set to "0"
 	global		calc			"0"
-	global 		merge_all1		"0"
 	global 		merge_all		"1"		// merges ODS-queried attendance, 
 										// behavioral, CRCT data for ms analyses
 	global		scoring			"0"
-********************************************************************************
 
-/* clear screen for 20,000 lines
+/*clear screen for 20,000 lines
 program define cls2
-        forvalues n=1/2000 {
+		set more off, permanently
+        forvalues n=1/20000 {
         display ""
         local ++n
         }
@@ -154,7 +154,6 @@ log using code/logfiles/extract.smcl, replace
 		odbc load, clear exec	("
 									SELECT distinct [LOC]
 										  ,[SCH_CODE]
-									  FROM [GSDR].[GEMS].[SDR_SCHOOL_B]
 									  WHERE SCH_YR = 20${histyr1}
 								")
 			dsn(ODS_Prod_RE) user(Research) pass(Research) ;
@@ -196,6 +195,8 @@ save data/prep/stateNum_to_gcpsNum_link, replace
 
 		rename gcps_studentid id
 		isid id grade altschoolindicator repeatinggradeindicator
+		
+		* to check if daysenrolled and daysabsent are plausible values
 		assert daysenrolled- daysabsent>=0
 ${save} data/orig/evalyr_hs, replace
 	
@@ -939,7 +940,9 @@ ${save} data/orig/gwyPassEver, replace
 **************************************************
 * Date entered 9th grade / entered cohort + grade
 **************************************************
-//get from Datamart SASI; set to 7 to 3 year historical interval. from current date or fixed date
+//get from Datamart SASI; set to 8 to 3 year historical interval. from current date or fixed date
+
+
 	#delimit ;
 		odbc load, clear exec	("
 			SELECT	 	 t1.[PermNum]
@@ -951,13 +954,20 @@ ${save} data/orig/gwyPassEver, replace
 						[Datamart_SASI].[dbo].[STUDENT_DATES] as t2 ON
 						t1.STUDENT_KEY = t2.STUDENT_KEY
 			WHERE		t2.[Date9thGrade] is not null and 
-						t2.[Date9thGrade] > GETDATE() - (${yrsbk}+4)*365 and 
-						t2.[Date9thGrade] < GETDATE() - ${yrsbk}*365 and
+						t2.[Date9thGrade] > DATEADD(YEAR, -(${yrsbk}+3), CONVERT(datetime,convert(char(8), 20${nxtyr}0801))) and 
+						t2.[Date9thGrade] < DATEADD(YEAR, -(${yrsbk}-2), CONVERT(datetime,convert(char(8), 20${nxtyr}0801))) and
 						LEN(t1.[PermNum]) >= 7
 			ORDER BY 	t2.[Date9thGrade] ASC
 								")
+								
+						
+
+						
+						
+						
 		dsn(ODS_Prod_MA) user(Research) pass(Research);
 	#delimit cr
+
 		foreach var of varlist* { 
 			destring `var', replace
 		rename `var' `=lower("`var'")'
@@ -1467,7 +1477,10 @@ rename `v' `v'_`yr'
 
 	use data/prep/yearstograd, clear
 		gen _dt9th = dofc(date9thgrade)
-			gen yr9th = year(_dt9th) + 1 // is year ending
+			gen mn9th = month(_dt9th)
+			gen yr9th = year(_dt9th)
+				replace  yr9th = yr9th + 1 if mn9th > 7 // +1 to get year ending
+			gen yr8th = yr9th - 1
 			gen yr10th = yr9th + 1
 			gen yr11th = yr9th + 2
 			gen yr12th = yr9th + 3
@@ -1476,15 +1489,14 @@ rename `v' `v'_`yr'
 				
 		* compute expected grade for use below
 		
-		
-		
-		local hy3 = ${histyr3} //09
-		local hy2 = ${histyr2} //10
-		local hy1 = ${histyr1} //11
-		local ey  = ${evalyr} // 12
+		local hy4 = ${histyr4} //09
+		local hy3 = ${histyr3} //10
+		local hy2 = ${histyr2} //11
+		local hy1 = ${histyr1} //12
+
 
 		
-		foreach yr in `hy3' `hy2' `hy1' `ey' {
+		foreach yr in `hy4' `hy3' `hy2' `hy1' { 
 				if (`yr' < 10) {			//just deals with 2 vs 1 digit
 					gen grade_200`yr' = .
 				}
@@ -1492,7 +1504,7 @@ rename `v' `v'_`yr'
 					gen grade_20`yr' = .
 				} //END IF gen
 			
-			forval grd = 9/12 {
+			forval grd = 8/11 {
 				if (`yr' < 10) {
 					replace grade_200`yr' = `grd' - (yr`grd'th - 200`yr')
 				} 
@@ -1594,7 +1606,63 @@ preserve
 restore
 	
 preserve
+		keep if schoolyear <= 20${evalyr} & grade >= 9 // histyr2 b/c completed course are predictor
 	
+	* first prep and get proportion of "course-completion" reqs met
+                 * core_ind + subject
+                         * end of 12th: 4 ELA, 4 MA, 4 SC, 3 SS  = 15; 23        - 15 = 8         other credits
+                         * end of 11th: 3 ELA, 3 MA, 3 SC, 2 SS  = 11; 17.25     - 11 = 6.25      other credits
+                         * end of 10th: 2 ELA, 2 MA, 2 SC, 1 SS  =  7; 11.5      - 7 = 4.5       other credits
+                         * end of 9th:  1 ELA, 1 MA, 1 SC        =  3; 5.75      - 3 = 2.75      other credits
+	
+
+                         replace creditsearned = . if creditsattempted == .
+
+		//coreind is perfectly matched to coresubjectcode - so no need to keep it
+		
+
+                 collapse (sum) creditsearned, by(id coresubjectcode) 
+                         
+                         reshape wide creditsearned, i(id) j(coresubjectcode) s
+
+                         rename(creditsearnedLA- creditsearnedSS) (la ma ot sc ss)
+
+                                 foreach v in la ma ot sc ss {
+                                         replace `v' = 0 if `v' == .
+                                 }
+                 isid id
+
+		  merge 1:1 id using data/prep/grades, nogen keep(1 3)
+
+		  
+         tempfile courses11
+         save `courses11', replace
+		 
+         ***********************
+		     keep if grade_20${histyr1} == 12
+								gen _la = la
+								gen _ma = ma
+								gen _sc = sc
+								gen _ss = ss
+									replace _la = 4 if la >= 4
+									replace _ma = 4 if ma >= 4
+									replace _sc = 4 if sc >= 4
+									replace _ss = 3 if ss >= 3
+                                 gen percCore = (_la/4*.25 + _ma/4*.25 + _sc/4*.25 + _ss/3*.25)
+                                 gen percOth = .
+
+										* case if taking typical # of core courses
+                                         replace percOth = ot/8 if (la + ma + sc + ss) < = 15
+										* case if core course taking is reducing taking other courses
+                                         replace percOth = ot/(23 - (la + ma + sc + ss)) if (la + ma + sc + ss) > 15
+                                         replace percOth = 2 if percOth < 0 | percOth > 2
+											
+											drop _la _ma _sc _ss
+                                        tempfile crsesGr12
+										save `crsesGr12', replace
+restore 
+
+preserve
 		keep if schoolyear <= 20${histyr1} & grade >= 9 // histyr2 b/c completed course are predictor
 	
 	* first prep and get proportion of "course-completion" reqs met
@@ -1622,32 +1690,10 @@ preserve
                  isid id
 
 		  merge 1:1 id using data/prep/grades, nogen keep(1 3)
+
 		  
          tempfile courses11
          save `courses11', replace
-		 
-         ***********************
-		     keep if grade_20${histyr1} == 12
-								gen _la = la
-								gen _ma = ma
-								gen _sc = sc
-								gen _ss = ss
-									replace _la = 4 if la >= 4
-									replace _ma = 4 if ma >= 4
-									replace _sc = 4 if sc >= 4
-									replace _ss = 3 if ss >= 3
-                                 gen percCore = (_la/4*.25 + _ma/4*.25 + _sc/4*.25 + _ss/3*.25)
-                                 gen percOth = .
-
-										* case if taking typical # of core courses
-                                         replace percOth = ot/8 if (la + ma + sc + ss) < = 15
-										* case if core course taking is reducing taking other courses
-                                         replace percOth = ot/(23 - (la + ma + sc + ss)) if (la + ma + sc + ss) > 15
-                                         replace percOth = 2 if percOth < 0 | percOth > 2
-											
-											drop _la _ma _sc _ss
-                                        tempfile crsesGr12
-										save `crsesGr12', replace
 
 										use `courses11', clear
 										
@@ -1722,6 +1768,7 @@ preserve
                                          save `crsesGr9', replace
 						 append using `crsesGr10'
 						 append using `crsesGr11'
+						 append using `crsesGr12'
 						 save data/prep/coursesTowardGrad, replace
 
 restore
@@ -1923,7 +1970,7 @@ use data/orig/histyr_hs, clear
 	local down = `v' - 1
 	
 	if (`v' == 12) {
-	keep if grade_20${evalyr} == `v' & daysenrolled_${histyr1}${evalyr} !=.
+	keep if grade_20${histyr1} == `v'
 	}
 	
 	
@@ -1933,7 +1980,7 @@ use data/orig/histyr_hs, clear
 	
 	* only keep kids who where enrolled for 65% of school year
 	}
-	
+
 	* historic year grades < 9
 	if (`v' < 9) {
 	keep if grade_${histyr2}${histyr1} == `v'
