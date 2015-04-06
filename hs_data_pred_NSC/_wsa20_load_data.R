@@ -457,7 +457,7 @@ dev.off()
 require(grid)
 # examine univariate histograms; requires adjacent variables for looping
 pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 2], 
-          "UnivHists.pdf", sep = ""), 
+          "_UnivHists.pdf", sep = ""), 
     width = 24, height = 18)
 
 dfn <- dfm[, which(names(dfm) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
@@ -517,7 +517,7 @@ for(i in 1:(ceiling(vs/7))) {
     print(h.1, vp = vplayout(k, 4))
     
   }
-  grid.text(paste("WSA 2.0 SSI ", p.grd, "th", ps.m[p.grd + 1, 3], 
+  grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
                   " Predictor Distributions: ", 
                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
@@ -597,7 +597,7 @@ assign(paste0("trainFinal80.", p.grd, "th", ps.m[p.grd + 1, 3]), trainFinal80)
 require(grid)
 # examine univariate histograms; requires adjacent variables for looping
 pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3],  
-          "UnivHistsPostProc.pdf", sep = ""), 
+          "_UnivHistsPostProc.pdf", sep = ""), 
     width = 24, height = 18)
 
 dfn <- training[, which(names(training) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
@@ -657,7 +657,7 @@ for(i in 1:(ceiling(vs/7))) {
     print(h.1, vp = vplayout(k, 4))
     
   }
-  grid.text(paste("WSA 2.0 SSI", p.grd, "th", ps.m[p.grd + 1, 3], 
+  grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
                   " Predictor Distributions: ", 
                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
@@ -841,8 +841,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   #==================
   
   if(ps[1, 2] != "")
-    sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                        as.character(ps[1, 1]), "Full", "Tuned.txt"),
+    sink(file = paste0(maindir, "\\results\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                        "_", as.character(ps[1, 1]), "_Full", "Tuned.txt"),
          append = FALSE, split = TRUE)
   print(mFull)
   sink()
@@ -853,8 +853,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   
   if(ps[1, 2] != "") {
     
-    pdf(file = paste0(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                       as.character(ps[1,1]), "Full", "Tuned.pdf"),  
+    pdf(file = paste0(maindir, "\\results\\graphs\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                       "_", as.character(ps[1,1]), "_Full", "Tuned.pdf"),  
         width = 8, height = 8)
     trellis.par.set(caretTheme())
     t <- plot(mFull, 
@@ -875,8 +875,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   
   mPred <- predict(mFull, tst[, names(tst)[-which(names(tst) == "Class")]])
   
-  sink(file = paste(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3],
-                    as.character(ps[1,1]), "Full", "confusionMatrix.txt", sep = ""),
+  sink(file = paste(maindir, "\\results\\", p.grd, "th_", ps.m[p.grd + 1, 3],
+                    "_", as.character(ps[1,1]), "_Full", "confusionMatrix.txt", sep = ""),
        append = FALSE, split = TRUE)
   Sys.time()
   cm <- confusionMatrix(mPred, tst$Class, positive = "Yes")
@@ -901,8 +901,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   assign(paste0(ps[1,1], ".probs"), final)
   
   # check calibration of probabilities
-  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                   ps[1,1], "Calibration_mFull.pdf", sep = ""),
+  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                   "_", ps[1,1], "_Calibration_mFull.pdf", sep = ""),
       width = 7, height = 7)
   calCurve <- calibration(Class ~ No, data = final)
   c <- xyplot(calCurve, auto.key = list(columns = 2), 
@@ -924,8 +924,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   
   rocObject
   
-  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3],
-                    ps[1,1], "ROCclassProbs.pdf", sep = ""),
+  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th_", ps.m[p.grd + 1, 3],
+                    "_", ps[1,1], "_ROCclassProbs.pdf", sep = ""),
       width = 7, height = 7)
   plot(rocObject, print.thres = 0.50, 
        main = paste0(ps[1,1], " ROC Curve and .50 Threshold: ", 
@@ -938,8 +938,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
   #===================================================
   # A Histogram of Class Probabilities by True Class ####
   #===================================================
-  png(filename = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                       ps[1,1], "ProbSuccess.png", sep = ""),
+  png(filename = paste(maindir, "\\results\\graphs\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                       "_", ps[1,1], "_ProbSuccess.png", sep = ""),
       width = 700, height = 700)
   h <- histogram(~mProbs$Yes|tst$Class,
                  xlab = paste0(ps[1,1], " Probability of Success in ", ps.m[p.grd + 1, 3], 
@@ -958,8 +958,8 @@ for(i in 1: length(unique(tuningPsSet[, 1]))) {
 require(ROCR)
 # first ROC
 
-pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                 " ROC_AUC_comparison.pdf", sep = ""),
+pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                 "_ROC_AUC_comparison.pdf", sep = ""),
     width = 8, height = 6)
 
 j <- 1L
@@ -1028,8 +1028,8 @@ for(k in 1:length(unique(tuningPsSet[, 1]))) {
   m.times[k, ] <- get(paste0(data[k, 1], ".time"))[1:3]
 }
 
-sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                   " modeling time.txt"),
+sink(file = paste0(maindir, "\\results\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                   "_modeling_time.txt"),
      append = FALSE, split = TRUE)
 
 # range of elapsed times
@@ -1062,7 +1062,7 @@ tunes <- data.frame(t(rep(NA, 3)))
 colnames(tunes) <- c("model", "parameter", "userTunePs")
 
 for(k in 1:length(dataTuned)) {
-  tuneObj <- get(paste0(dataTuned[k], ".tuned.", p.grd, "th", ps.m[p.grd + 1, 3]))
+  tuneObj <- get(paste0(dataTuned[k], ".tuned.", p.grd, "th_", ps.m[p.grd + 1, 3]))
   pars <- t(rbind(names(tuneObj$bestTune), tuneObj$bestTune))
   pars <- cbind(rep(dataTuned[k], dim(tuneObj$bestTune)[2]), pars)
   
@@ -1192,8 +1192,8 @@ for (l in 2:length(fs.models)) {
   
   # save output and record time
   
-  sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                     wrappers[l, 2], "RFE.txt"),
+  sink(file = paste0(maindir, "\\results\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                     "_", wrappers[l, 2], "_RFE.txt"),
        append = FALSE, split = TRUE)
   
   print(RFE)
@@ -1203,8 +1203,8 @@ for (l in 2:length(fs.models)) {
   # plot RFE results
   #-----------------*
   
-  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3], 
-                   wrappers[l, 1], "RFE.pdf", sep = ""),
+  pdf(file = paste(maindir, "\\results\\graphs\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
+                   "_", wrappers[l, 1], "_RFE.pdf", sep = ""),
       width = 10, height = 7)
   
   rfePlot <- plot(RFE, 
@@ -1228,7 +1228,7 @@ for (l in 2:length(fs.models)) {
   dev.off()
   
   assign(paste0(wrappers[l, 2], "RFE"), RFE)
-  assign(paste0(wrappers[l, 2], "RFE.", p.grd, "th", ps.m[p.grd + 1, 3]), RFE)
+  assign(paste0(wrappers[l, 2], "RFE.", p.grd, "th_", ps.m[p.grd + 1, 3]), RFE)
   
   # Stop the clock!
   time <- proc.time() - ptm
@@ -1246,7 +1246,7 @@ for(m in 2:length(fs.models)) {
   r.times[m, ] <- get(paste0(wrappers[m, 1], "RFE.time"))[1:3]
 }
 
-sink(file = paste0(maindir, "\\results\\", p.grd, "th", ps.m[p.grd + 1, 3], 
+sink(file = paste0(maindir, "\\results\\", p.grd, "th_", ps.m[p.grd + 1, 3], 
                    " RFE time.txt"),
      append = FALSE, split = TRUE)
 
@@ -1422,7 +1422,7 @@ if(max(lrRFE$results$ROC) >= .85) {
   bal.f <- bal.f[bal.f$probability == min(bal.f$probability), 
                  -(c(1, dim(bal.f)[2]))]
   
-  assign(paste0("bal.f", p.grd, "th", ps.m[p.grd + 1, 3]), bal.f)
+  assign(paste0("bal.f", p.grd, "th_", ps.m[p.grd + 1, 3]), bal.f)
   
   # multiple coeffs by progression matrix and filter first above .75
   bal <- as.data.frame(cbind(go.mns.b, exp(go.mns.b %*% go.coeffs) / 
@@ -1434,7 +1434,7 @@ if(max(lrRFE$results$ROC) >= .85) {
   bal.f <- bal.f[bal.f$probability == min(bal.f$probability), 
                  -(c(1, dim(bal.f)[2]))]
   
-  assign(paste0("bal.f", p.grd, "th", ps.m[p.grd + 1, 3]), bal.f)
+  assign(paste0("bal.f", p.grd, "th_", ps.m[p.grd + 1, 3]), bal.f)
 }
 
 
@@ -1636,7 +1636,7 @@ if (is.na(calMods[1])) {
 }
 
 # sink models used by grade
-sink(file = paste0(maindir, "\\results\\calMods", p.grd, "th", 
+sink(file = paste0(maindir, "\\results\\calMods_", p.grd, "th_", 
                    ps.m[p.grd + 1, 3], ".txt"), append = FALSE, split = TRUE)
 
 print(fs.models[calMods])
@@ -1691,7 +1691,7 @@ names(final)[grep("as.numeric",
 
 # save copy of student scores
 write.csv(final, 
-          paste0(maindir, "\\results\\studentLevel_scoredProbs_", p.grd, "th", ps.m[p.grd + 1, 3], 
+          paste0(maindir, "\\results\\studentLevel_scoredProbs_", p.grd, "th_", ps.m[p.grd + 1, 3], 
                  ".csv"), 
           row.names = FALSE)
 
@@ -1712,7 +1712,7 @@ final.schl <- final.schl[final.schl$N > 30, ]
 final.schl$diff <- round((final.schl$actual - final.schl$prob)*100, 1)
 
 write.csv(final.schl, 
-          paste0(maindir, "\\results\\scoredProbs_", p.grd, "th", ps.m[p.grd + 1, 3], 
+          paste0(maindir, "\\results\\scoredProbs_", p.grd, "th_", ps.m[p.grd + 1, 3], 
                  ".csv"), 
           row.names = FALSE)
 
@@ -1731,17 +1731,17 @@ frpl12 <- frpl12[, c(1, 11)]
 
 final.mrg <- merge(final.schl, frpl12, by.x = "zoned_school_E", by.y = "loc_code", all.x = TRUE)
 
-assign(paste0("final.mrg", p.grd, "th", ps.m[p.grd + 1, 3]), final.mrg)
+assign(paste0("final.mrg", p.grd, "th_", ps.m[p.grd + 1, 3]), final.mrg)
 
 # plot %FRL & CCROTG %diff
 
-jpeg(paste0("../student.success.factor/results/graphs/relToFRL_", p, "th", p + 1, "th.jpg"), 
+jpeg(paste0("../student.success.factor/results/graphs/relToFRL_", p, "th_", ps.m[p.grd + 1, 3], ".jpg"), 
      width = 800, height = 600)
 plt <- ggplot(data = final.mrg, aes(final.mrg[, 7], final.mrg[, 6]))
 plt <- plt + geom_point(size = 3, position = "Jitter", colour = "grey60")
 plt <- plt + stat_smooth(span = 0.9, method = "loess", size = 1, colour = "black")
 plt <- plt + stat_smooth(method = "lm", size = 1.5)
-plt <- plt + ggtitle(paste0("CCROTG: ", p, "th to ", p + 1, "th Grade (r = ", 
+plt <- plt + ggtitle(paste0("CCROTG: ", p, "th to ", ps.m[p.grd + 1, 3], " Grade (r = ", 
                             round(cor(final.mrg[, 6], final.mrg[, 7]), 2), "; ", 
                             "R-squared = ", round(cor(final.mrg[, 6], 
                                                       final.mrg[, 7])**2, 2), ")"))
