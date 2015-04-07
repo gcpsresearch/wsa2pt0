@@ -569,6 +569,10 @@ predVars <- names(dfm)[!(names(dfm) %in% c("id",  "p.e",
                                            "zoned_school_E", 
                                            "zoned_school_name_E"))]
 
+if (p.grd == 12) {
+  predVars <- predVars[!predVars == "startyear_grade_E"]
+}
+
 # check distribution of missing values across rows
 hist(apply(train[, predVars], 1, function(x) sum(is.na(x))))
 
@@ -810,7 +814,7 @@ trainFinal$p.e <- factor(ifelse(trainFinal$Class == "Yes", 1, 0),
 # iterate tuning process through models specified
 
 # make grid if needed
-for(i in 1: length(unique(tuningPsSet[, 1]))) {
+for(i in 1:length(unique(tuningPsSet[, 1]))) {
   
   ps <- tuningPsSet[tuningPsSet$model == unique(tuningPsSet[, 1])[i], ]
   
