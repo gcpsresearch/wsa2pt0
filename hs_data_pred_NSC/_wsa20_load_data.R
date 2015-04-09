@@ -1,9 +1,8 @@
+
 # Revising WSA work to incorporate NSC persistent enrollment as new outcome var
 #
-#
-# !!start line 313
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.04.07 by James Appleton
+#   last updated  2015.04.08 by James Appleton
 
 #========================#
 # Setup/Load Packages ####
@@ -14,7 +13,8 @@ gc()
 packages <- c("plyr", "dplyr", "reshape", "reshape2", "ggplot2", "grid", "catspec",
               "RODBC", "foreign","ggthemes", "grid", "gridExtra", "doParallel", 
               "AppliedPredictiveModeling", "caret", "gbm", "data.table", "ROCR", 
-              "RANN", "plyr", "e1071")
+              "RANN", "e1071")
+
 lapply(packages, require, character.only=T)
 
 #rm(list=ls()) 
@@ -80,10 +80,10 @@ startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
 
 # set sample size and cross-validations 
 # proportion of sample to use
-sz      <- .5 # 1 = 100%
+sz      <- 1 # 1 = 100%
 # number of cross-validations (suggest 10 for big datasets)
   # add "repeated cross-validation" for smaller datasets
-crossVs <- 5 #  
+crossVs <- 10 #  
 
 #Setup Parallel processing ?
 cl <- makeCluster(detectCores())
@@ -114,13 +114,13 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "lafail_H1", "mafail_H1", "scfail_H1", 
             "ssfail_H1", "corefail_H1", "lafail_from8th_H1", "mafail_from8th_H1",
             "scfail_from8th_H1", "ssfail_from8th_H1", "corefail_from8th_H1", "gft_from8th_H1", 
-            "retained_from04", "gft_H1", "gft_from8th_H1", "gft_H1", "sep_index_H1", "gini_index_H1",
+            "retained_from04", "gft_H1", "gft_from8th_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
             "schlAtt_H1", "schl_LAcrct", "schl_MAcrct", "schl_RDcrct", "schl_SCcrct", "spedCatMin_H1", 
             "spedCatMod_H1", "spedCatSev_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
             "ss_totSCsq", "schl_LAcrctsq", "schl_MAcrctsq", "schl_RDcrctsq", "schl_fg", "schl_fsl",
-            "schl_sei_all", "schl_SCcrctsq", "p.e", "ap.t","ib.t",  "cum.gpa", "ps.t" )
+            "schl_sei_all", "schl_SCcrctsq")
 
 evYr  <- "startyear_grade_E"
 zoned <- c("zoned_school_E", "zoned_school_name_E")
@@ -130,11 +130,11 @@ g9 <-     c("la", "ma", "sc", "ss", "percCore", "percOth",
             "ap_ib_pass_H1", "ap_ib_pass_from8th_H1")
 g10 <-    c("psat_scoreCR", "psat_scoreMA", "psat_scoreWR", "psat_collReady", "la", 
             "ma", "sc", "ss", "percCore", "percOth", "ap_ib_pass_H1", 
-            "ap_ib_pass_from8th_H1")
+            "ap_ib_pass_from8th_H1", "ap.t", "ib.t", "ps.t" )
 
 g11 <-    c(g10, "psr")
 
-g12 <-    g11
+g12 <-    c(g11, "p.e")
 
 factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1", 
              "loc_H1", "mafail_H1", "scfail_H1", "ssfail_H1", "corefail_H1", 
@@ -174,7 +174,7 @@ vplayout <- function(x, y)
   rm(e, e2)
   gc()
 
-for (p in 12:12) {
+for (p in 11:11) {
   
   #  for (yr in 2012:2013) {
   
@@ -490,80 +490,80 @@ corrplot(predCor,
          type = "upper")
 dev.off()
 
-require(grid)
-# examine univariate histograms; requires adjacent variables for looping
-pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 2], 
-          "_UnivHists.pdf", sep = ""), 
-    width = 24, height = 18)
-
-dfn <- dfm[, which(names(dfm) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
-
-# set variable range once by column #s or column names
-start <-  1
-vs <- dim(dfn)[2]
-
-#         start <- which(names(df.n) == "dsevmx_H1")
-#         vs <- which(names(df.n) == "coreCumulGPA_H1") - start + 2
-
-for(i in 1:(ceiling(vs/7))) {
-  grid.newpage()
-  pushViewport(viewport(layout = grid.layout(min(7, vs), 4)))
-  
-  # scales to matrix location of variables for graphing
-  range <- (min((i-1)*6+(start)):max((i-1)*6+(start + 5)))
-  for(j in range) {
-    
-    # variable-specific removal of NAs
-    d.h <- dfn[!is.na(dfn[, j]), ]
-    
-    sd <- sd(d.h[, j])
-    
-    bin <- min(ceiling(length(unique(d.h[, j]))/30), .2*sd)
-    h2 <- ggplot(data = d.h, aes(d.h[, j]))
-    h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$p.e,
-    h2 <- h2 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                          round(2*bin, 2), sep = ""))
-    h2
-    
-    h1 <- ggplot(data = d.h, aes(d.h[, j]))
-    h1 <- h1 + geom_histogram(binwidth = 1*bin) # colour = "white", 
-    h1 <- h1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                          round(1*bin, 2), sep = ""))
-    h1 
-    
-    h.5 <- ggplot(data = d.h, aes(d.h[, j]))
-    h.5 <- h.5 + geom_histogram(binwidth = .5*bin) # colour = "white", 
-    h.5 <- h.5 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                            round(.5*bin, 2), sep = ""))
-    h.5 
-    
-    h.1 <- ggplot(data = d.h, aes(d.h[, j]))
-    h.1 <- h.1 + geom_histogram(binwidth = .1*bin) # colour = "white", 
-    h.1 <- h.1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                            round(.1*bin, 2), sep = ""))
-    h.1 
-    
-    
-    # + 2 scales graphs to 2nd row to lv room for title
-    k <- as.numeric((j - min(range) + 2))
-    
-    print(h2, vp = vplayout(k, 1))
-    print(h1, vp = vplayout(k, 2))
-    print(h.5, vp = vplayout(k, 3))
-    print(h.1, vp = vplayout(k, 4))
-    
-  }
-  grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
-                  " Predictor Distributions: ", 
-                  "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
-            vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
-                          just = "centre"))
-  
-}
-
-
-
-dev.off()
+# require(grid)
+# # examine univariate histograms; requires adjacent variables for looping
+# pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 2], 
+#           "_UnivHists.pdf", sep = ""), 
+#     width = 24, height = 18)
+# 
+# dfn <- dfm[, which(names(dfm) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
+# 
+# # set variable range once by column #s or column names
+# start <-  1
+# vs <- dim(dfn)[2]
+# 
+# #         start <- which(names(df.n) == "dsevmx_H1")
+# #         vs <- which(names(df.n) == "coreCumulGPA_H1") - start + 2
+# 
+# for(i in 1:(ceiling(vs/7))) {
+#   grid.newpage()
+#   pushViewport(viewport(layout = grid.layout(min(7, vs), 4)))
+#   
+#   # scales to matrix location of variables for graphing
+#   range <- (min((i-1)*6+(start)):max((i-1)*6+(start + 5)))
+#   for(j in range) {
+#     
+#     # variable-specific removal of NAs
+#     d.h <- dfn[!is.na(dfn[, j]), ]
+#     
+#     sd <- sd(d.h[, j])
+#     
+#     bin <- min(ceiling(length(unique(d.h[, j]))/30), .2*sd)
+#     h2 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$p.e,
+#     h2 <- h2 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                           round(2*bin, 2), sep = ""))
+#     h2
+#     
+#     h1 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h1 <- h1 + geom_histogram(binwidth = 1*bin) # colour = "white", 
+#     h1 <- h1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                           round(1*bin, 2), sep = ""))
+#     h1 
+#     
+#     h.5 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h.5 <- h.5 + geom_histogram(binwidth = .5*bin) # colour = "white", 
+#     h.5 <- h.5 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                             round(.5*bin, 2), sep = ""))
+#     h.5 
+#     
+#     h.1 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h.1 <- h.1 + geom_histogram(binwidth = .1*bin) # colour = "white", 
+#     h.1 <- h.1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                             round(.1*bin, 2), sep = ""))
+#     h.1 
+#     
+#     
+#     # + 2 scales graphs to 2nd row to lv room for title
+#     k <- as.numeric((j - min(range) + 2))
+#     
+#     print(h2, vp = vplayout(k, 1))
+#     print(h1, vp = vplayout(k, 2))
+#     print(h.5, vp = vplayout(k, 3))
+#     print(h.1, vp = vplayout(k, 4))
+#     
+#   }
+#   grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
+#                   " Predictor Distributions: ", 
+#                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
+#             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
+#                           just = "centre"))
+#   
+# }
+# 
+# 
+# 
+# dev.off()
 
 #=============================================
 # preProcess //center, scale, impute missing ####
@@ -637,80 +637,80 @@ assign(paste0("trainFinal80.", p.grd, "th", ps.m[p.grd + 1, 3]), trainFinal80)
 # post-process histograms ####
 #=========================
 
-require(grid)
-# examine univariate histograms; requires adjacent variables for looping
-pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3],  
-          "_UnivHistsPostProc.pdf", sep = ""), 
-    width = 24, height = 18)
-
-dfn <- training[, which(names(training) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
-
-# set variable range once by column #s or column names
-start <-  1
-vs <- dim(dfn)[2]
-
-#         start <- which(names(df.n) == "dsevmx_H1")
-#         vs <- which(names(df.n) == "coreCumulGPA_H1") - start + 2
-
-for(i in 1:(ceiling(vs/7))) {
-  grid.newpage()
-  pushViewport(viewport(layout = grid.layout(min(7, vs), 4)))
-  
-  # scales to matrix location of variables for graphing
-  range <- (min((i-1)*6+(start)):max((i-1)*6+(start + 5)))
-  for(j in range) {
-    
-    # variable-specific removal of NAs
-    d.h <- dfn[!is.na(dfn[, j]), ]
-    
-    sd <- sd(d.h[, j])
-    
-    bin <- min(ceiling(length(unique(d.h[, j]))/30), .2*sd)
-    h2 <- ggplot(data = d.h, aes(d.h[, j]))
-    h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$p.e,
-    h2 <- h2 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                          round(2*bin, 2), sep = ""))
-    h2
-    
-    h1 <- ggplot(data = d.h, aes(d.h[, j]))
-    h1 <- h1 + geom_histogram(binwidth = 1*bin) # colour = "white", 
-    h1 <- h1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                          round(1*bin, 2), sep = ""))
-    h1 
-    
-    h.5 <- ggplot(data = d.h, aes(d.h[, j]))
-    h.5 <- h.5 + geom_histogram(binwidth = .5*bin) # colour = "white", 
-    h.5 <- h.5 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                            round(.5*bin, 2), sep = ""))
-    h.5 
-    
-    h.1 <- ggplot(data = d.h, aes(d.h[, j]))
-    h.1 <- h.1 + geom_histogram(binwidth = .1*bin) # colour = "white", 
-    h.1 <- h.1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
-                            round(.1*bin, 2), sep = ""))
-    h.1 
-    
-    
-    # + 2 scales graphs to 2nd row to lv room for title
-    k <- as.numeric((j - min(range) + 2))
-    
-    print(h2, vp = vplayout(k, 1))
-    print(h1, vp = vplayout(k, 2))
-    print(h.5, vp = vplayout(k, 3))
-    print(h.1, vp = vplayout(k, 4))
-    
-  }
-  grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
-                  " Predictor Distributions: ", 
-                  "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
-            vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
-                          just = "centre"))
-  
-}
-
-
-
-dev.off()
+# require(grid)
+# # examine univariate histograms; requires adjacent variables for looping
+# pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 3],  
+#           "_UnivHistsPostProc.pdf", sep = ""), 
+#     width = 24, height = 18)
+# 
+# dfn <- training[, which(names(training) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
+# 
+# # set variable range once by column #s or column names
+# start <-  1
+# vs <- dim(dfn)[2]
+# 
+# #         start <- which(names(df.n) == "dsevmx_H1")
+# #         vs <- which(names(df.n) == "coreCumulGPA_H1") - start + 2
+# 
+# for(i in 1:(ceiling(vs/7))) {
+#   grid.newpage()
+#   pushViewport(viewport(layout = grid.layout(min(7, vs), 4)))
+#   
+#   # scales to matrix location of variables for graphing
+#   range <- (min((i-1)*6+(start)):max((i-1)*6+(start + 5)))
+#   for(j in range) {
+#     
+#     # variable-specific removal of NAs
+#     d.h <- dfn[!is.na(dfn[, j]), ]
+#     
+#     sd <- sd(d.h[, j])
+#     
+#     bin <- min(ceiling(length(unique(d.h[, j]))/30), .2*sd)
+#     h2 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$p.e,
+#     h2 <- h2 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                           round(2*bin, 2), sep = ""))
+#     h2
+#     
+#     h1 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h1 <- h1 + geom_histogram(binwidth = 1*bin) # colour = "white", 
+#     h1 <- h1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                           round(1*bin, 2), sep = ""))
+#     h1 
+#     
+#     h.5 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h.5 <- h.5 + geom_histogram(binwidth = .5*bin) # colour = "white", 
+#     h.5 <- h.5 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                             round(.5*bin, 2), sep = ""))
+#     h.5 
+#     
+#     h.1 <- ggplot(data = d.h, aes(d.h[, j]))
+#     h.1 <- h.1 + geom_histogram(binwidth = .1*bin) # colour = "white", 
+#     h.1 <- h.1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
+#                             round(.1*bin, 2), sep = ""))
+#     h.1 
+#     
+#     
+#     # + 2 scales graphs to 2nd row to lv room for title
+#     k <- as.numeric((j - min(range) + 2))
+#     
+#     print(h2, vp = vplayout(k, 1))
+#     print(h1, vp = vplayout(k, 2))
+#     print(h.5, vp = vplayout(k, 3))
+#     print(h.1, vp = vplayout(k, 4))
+#     
+#   }
+#   grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
+#                   " Predictor Distributions: ", 
+#                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
+#             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
+#                           just = "centre"))
+#   
+# }
+# 
+# 
+# 
+# dev.off()
 #####
 
 testX <- test[, predVars]
@@ -813,7 +813,7 @@ tuningPsSet$userTunePs <- as.character(tuningPsSet$userTunePs)
 print(tuningPsSet)
 
 ctrl <- trainControl(method = "cv",
-                     number = 2, 
+                     number = crossVs, 
                      classProbs = TRUE,
                      allowParallel = TRUE,
                      summaryFunction = twoClassSummary)
@@ -1142,7 +1142,7 @@ wrappers <- cbind(c("gbm", "glm", "lda", "rf"),
 
 # plot(cbind(2*(1:length(t))-1, t))
 
-for (l in 1:length(wrappers[, 1])) {  # could dynamically code wrappers to match fs.models and make this length(fs.models)
+for (l in 2:length(wrappers[, 1])) {  # could dynamically code wrappers to match fs.models and make this length(fs.models)
   
   r.trn <- get(data2[l, 2])
   r.trn <- r.trn[, names(r.trn)[-which(names(r.trn) == data2[l, 3])]]
@@ -1286,7 +1286,7 @@ for (l in 1:length(wrappers[, 1])) {  # could dynamically code wrappers to match
 #===================================
 
 r.times <- matrix(data = NA, nrow = length(fs.models), ncol = 3)
-for(m in 2:length(fs.models)) {
+for(m in 2:length(wrappers[, 1])) {
   r.times[m, ] <- get(paste0(wrappers[m, 1], "RFE.time"))[1:3]
 }
 
