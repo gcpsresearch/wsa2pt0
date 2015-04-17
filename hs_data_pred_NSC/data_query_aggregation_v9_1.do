@@ -89,6 +89,7 @@ global ssipath = "`path'\RBES\WSA 2.0\student.success.factor"
 drop path
 cd "${ssipath}"
 
+	global		crctMin		650			// set min scale score for CRCT
 	global		yrsbk		"3"			// years back from end yr of current 
 											* academic year; e.g., 3 in 14-15
 											* year sets grad year as 2015-3 = 2012
@@ -688,7 +689,7 @@ ${save} data/orig/crct_hs, replace
 								//better than no achievement proxy
 
 		*remove those with 0 since not possible (is missing?)
-		drop if ss_tot==. | ss_tot==0
+		drop if ss_tot==. | ss_tot==0 | ss_tot < 650
 
 		*create yr grade subj
 		gen tname = "CRCT"
