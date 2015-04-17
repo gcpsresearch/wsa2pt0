@@ -100,7 +100,7 @@ cd "${ssipath}"
 	global		histyr2		"10"		// historic year 2
 	global 		histyr3		"09"		// historic year 3
 	global		histyr4		"08"		// historic year 4
-	global		histyr5		"07"		// historic year 5 - needed for CRCTs
+	global		histyr5		"07"		// historic year 5
 	
 * 	globals to control functions when wanting to not overwrite on re-runs
 	global		save		"save"
@@ -661,7 +661,7 @@ ${save} data\prep\mobility${histyr2}${histyr1}_hs, replace
 		odbc load, clear exec	("
 			SELECT * 
 			FROM 	Assessment.dbo.TEST_STU_CRT 
-			WHERE 	EXAM_ADMIN_DATE > 20${histyr5}0801 and 
+			WHERE 	EXAM_ADMIN_DATE > 20${histyr5}0201 and 
 					EXAM_ADMIN_DATE < 20${evalyr}0801 and SUBJECT!= 'SS'
 								")
 		dsn(ODS_Prod_Assm) user(Research) pass(Research);
@@ -2143,8 +2143,8 @@ use data/orig/histyr_hs, clear
 	
 	* summarize prior crct score by school
 	preserve
-		collapse (mean) schl_LAcrct = ss_totLA schl_MAcrct = ss_totMA ///
-						schl_RDcrct = ss_totRD schl_SCcrct = ss_totSC, ///
+		collapse (mean) schl_totLA = ss_totLA schl_totMA = ss_totMA ///
+						schl_totRD = ss_totRD schl_totSC = ss_totSC, ///
 						by(loc_${histyr2}${histyr1})
 					save data/prep/schl_crct, replace
 	restore
