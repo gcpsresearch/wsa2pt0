@@ -2,7 +2,7 @@
 # Revising WSA work to incorporate NSC persistent enrollment as new outcome var
 #
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.04.16 by James Appleton
+#   last updated  2015.04.17 by James Appleton
 
 #========================#
 # Setup/Load Packages ####
@@ -117,11 +117,11 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "scfail_from8th_H1", "ssfail_from8th_H1", "corefail_from8th_H1", "gft_from8th_H1", 
             "retained_from04", "gft_H1", "gft_from8th_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
-            "schlAtt_H1", "schl_LAcrct", "schl_MAcrct", "schl_RDcrct", "schl_SCcrct", "spedCatMin_H1", 
+            "schlAtt_H1", "schl_totLA", "schl_totMA", "schl_totRD", "schl_totSC", "spedCatMin_H1", 
             "spedCatMod_H1", "spedCatSev_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
-            "ss_totSCsq", "schl_LAcrctsq", "schl_MAcrctsq", "schl_RDcrctsq", "schl_fg", "schl_fsl",
-            "schl_sei_all", "schl_SCcrctsq", "target")
+            "ss_totSCsq", "schl_fg", "schl_fsl",
+            "schl_sei_all", "target")
 
 evYr  <- "startyear_grade_E"
 zoned <- c("zoned_school_E", "zoned_school_name_E")
@@ -131,7 +131,7 @@ g9 <-     c("la", "ma", "sc", "ss", "percCore", "percOth",
 g10 <-    c(g9, "psat_scoreCR", "psat_scoreMA", "psat_scoreWR", "psat_collReady", 
  			"ap.t", "ib.t", "ps.t")
 
-g11 <-    c(g10, "psr")
+g11 <-    c(g10, "scoreMA", "scoreVE", "psr")
 
 g12 <-    g11
 
@@ -186,20 +186,6 @@ for (p in 12:11) {
                         p.grd + 1, "th_model_only", ".csv"), sep=",", 
                  header = TRUE)
 			
-  # drop CRCTs on non-GPS scale
-	df[!is.na(df$ss_totLA) & df$ss_totLA < 650,] <- NA
-	df[!is.na(df$ss_totMA) & df$ss_totMA < 650,] <- NA
-	df[!is.na(df$ss_totRD) & df$ss_totRD < 650,] <- NA
-	df[!is.na(df$ss_totSC) & df$ss_totSC < 650,] <- NA
-  
-  # add polynomials
-  for(i in c(which(names(df) %in% c("ss_totLA", "ss_totMA", "ss_totRD", 
-                                    "ss_totSC", "schl_LAcrct", 
-                                    "schl_MAcrct", "schl_RDcrct", 
-                                    "schl_SCcrct")))) {
-    
-    df[[paste0(names(df)[i], "sq")]] <- (df[[i]])**2
-      }
   if(p.grd >= 11) {
   #create post-secondary-ready indicator (psr)
          # SAT M and CR >= 520 OR
@@ -222,6 +208,10 @@ for (p in 12:11) {
   }
   # use best prior predictors if exist and convert to evalyr equivalents
   # remove unchangeable things (e.g., PSAT)
+  if(!(exists("bal.f") & p.grd < 12) {
+	bal.f2 <- read.csv(paste0("..\\student.success.factor\\data\\prep\\bal.f", p.grd, "th_", ps.m[p.grd + 1, 3], 
+		".csv"), header=TRUE, sep = ",")
+  }
   if (exists("bal.f")) {
     
     bal.f.clr <- bal.f[(grep("dsev|drate|lacourse|macourse|pabs|fg|fsl|sei_all", 
@@ -360,7 +350,7 @@ dfm <- df[, which(names(df) %in% c(keep, zoned,
  	get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
-names(df)[-which(names(df) %in% names(dfm))]
+names(df)[-(which(names(df) %in% names(dfm)))]
 
 # check all kids enrolled in E year
 stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
@@ -430,7 +420,7 @@ dfm <- merge(dfm.m, dual.enr, by = "id", all.x = TRUE)
 dfm <- data.frame(dfm)
 
 if(p.grd == 12) {
-	dfm <- merge(df, nsc.model, by = "id", all.x =  FALSE)
+	dfm <- merge(df, nsc.model, by = "id", all.x =  TRUE)
 	dfm$target <- dfm$p.e
 }
 if(length(dfm$ap.t)>0) dfm$ap.t[is.na(dfm$ap.t)] <- FALSE
@@ -468,6 +458,24 @@ if(p.grd > 9) {
       which(names(dfm) == "psat_scoreWR")] <- NA
 }
 
+
+
+# drop all variables with 60% or more missing data
+	rem <- dfm[ lapply( dfm, function(x) sum(is.na(x)) / length(x) ) > 0.60 ]
+	if(length(rem) > 0) {
+	rem2 <- lapply(names(rem), function(x) gsub("ss_", "schl_", x))
+	dfm <- dfm[, -(which(names(dfm) %in% c(names(rem), unlist(rem2))))]
+	}
+
+# add polynomials
+  for(i in c(which(names(dfm) %in% c("ss_totLA", "ss_totMA", "ss_totRD", 
+                                    "ss_totSC", "schl_totLA", 
+                                    "schl_totLA", "schl_totLA", 
+                                    "schl_totLA")))) {
+    
+    dfm[[paste0(names(dfm)[i], "sq")]] <- (dfm[[i]])**2
+      }
+
 # subset numeric variables for graphing
 nums <- names(dfm[complete.cases(dfm), sapply(dfm, function(x) class(x) %in% 
                              c("numeric", "integer", "logical") & 
@@ -478,10 +486,11 @@ if(p.grd != 12) {
 	  sink(file = paste(maindir, "\\results\\perc.mtg.target_", p.grd, 
 		"th_", ps.m[p.grd + 1, 3], ".txt", sep = ""),
 		   append = FALSE, split = TRUE)
-	  tbl <- round(prop.table(table(df$target))*100, 1)
+	  tbl <- table(df$target)
 	  if(p.grd == 11) {cat("Students must be on-time (4-year) graduates.\n ")}
       print(bal.f.clr)
 	  print(tbl)
+	  print(round(prop.table(tbl)*100, 1))
 	  sink()
 	# create percentage meeting target object
 		assign(paste0("perc.mtg.target_", p.grd, ps.m[p.grd + 1, 3]), tbl)
@@ -600,9 +609,10 @@ dev.off()
 # questions - how apply cv preProcessing to set for scoring?
 
 set.seed(721)
-split <- createDataPartition(dfm$target, p = .7, list = FALSE)
+split <- createDataPartition(dfm$target, p = .8, list = FALSE)
 
 dfm$Class <- as.factor(ifelse(dfm$target == 1, "Yes", "No"))
+dfm <- dfm[,-(which(names(dfm) == "target"))]
 
 train <- dfm[ split, ]
 test  <- dfm[-split, ]
@@ -1514,6 +1524,8 @@ if(p.grd < 12) {bal.f <- bal[bal$probability >= .67, ]}
                  -(c(1, dim(bal.f)[2]))]
   
   assign(paste0("bal.f", p.grd, "th_", ps.m[p.grd + 1, 3]), bal.f)
+  write.table(bal.f, paste0("..\\student.success.factor\\data\\prep\\bal.f", p.grd, "th_", ps.m[p.grd + 1, 3], ".csv"), 
+ 	sep = ",", header = TRUE, col.names=TRUE, row.names=FALSE)
 }
 
 

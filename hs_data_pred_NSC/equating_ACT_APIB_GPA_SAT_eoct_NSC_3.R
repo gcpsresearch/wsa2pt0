@@ -5,7 +5,7 @@
 ##    give students an 80% chance of enrolling in college, and 2-year persistence in college
 
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.03.26 by James Appleton
+#   last updated  2015.03.23 by James Appleton
 
 ############
 # Setup
@@ -107,26 +107,21 @@ nsc <- read.csv(paste0(path, "\\Research Projects\\NSC Student Tracker\\",
 #   nsc[is.na(nsc$e.end), "e.end" ] <- 0
 
   # keep students graduating in cohort years and assign cohort
-  nsc$gradGroup <- NA
-  nsc$academicYr <- NA
+  nsc$cohort <- NA
 
 for (i in 1:yrs) {
   
     nsc[nsc$high_school_grad_date >= (gradYear_shrt[i] - 1)*10000 + 0801 & 
-        nsc$high_school_grad_date <= gradYear_shrt[i]*10000 + 0731, "gradGroup"] <- gradYear_shrt[i]
-    
-    nsc[!is.na(nsc$enrollment_begin) &
-          nsc$enrollment_begin >= (gradYear_shrt[i])*10000 + 0801 & 
-          !is.na(nsc$enrollment_end) & 
-        nsc$enrollment_end <= (gradYear_shrt[i] + 1)*10000 + 0815, "academicYr"] <- gradYear_shrt[i]
+        nsc$high_school_grad_date <= gradYear_shrt[i]*10000 + 0731, dim(nsc)[2]] <- gradYear_shrt[i]
 }
 
-# check that both enrollment_begin and enrollment_end are always both NA if either one is NA
+# check that both enrollment_begin and enrollment_end are always both 0 if either one is 0
 stopifnot(is.na(nsc[is.na(nsc$e.beg), "e.end"]))
   stopifnot(is.na(nsc[is.na(nsc$e.end), "e.beg"]))
 # check day differences are as expected: enrollment_end greater than enrollment_begin
   stopifnot(nsc[!is.na(nsc$e.end), "e.end"] - 
               nsc[!is.na(nsc$e.end), "e.beg"] >= 0)
+
 
 
 nsc$e.days <- NA
@@ -137,102 +132,107 @@ nsc$e.days <- nsc$e.days/(60*60*24)
 
 
 # (F)ull-time, (H)alf-time, (L)ess than half-time, (Q) 3/4 time, 
-#   (A) Leave of absence, (W)ithdrawn, (D)eceased, (" ") blank if school doesn't define
-  # to deal with this we will (" ") will not exclude an enrollment from counting
+#   (A) Leave of absence, (W)ithdrawn, (D)eceased
 #   from: http://www.studentclearinghouse.org/colleges/files/ST_DetailReportGuide.pdf
-
-recY_noGrad <- expression(nsc$record_found_y.n == "Y" & is.na(nsc$graduation_date))
 
   # create gcps id
   nsc[,1] <- as.character(nsc[,1])
   nsc$id <- as.numeric(substr(nsc[,1], 1, nchar(nsc[,1]) - 1))
 
-      nsc <- nsc[!is.na(nsc$gradGroup), ]
+      nsc <- nsc[!is.na(nsc$cohort), ]
 
   # create immed.transition and persist.enroll variables
     # date choice source: http://gardnercenter.stanford.edu/resources/publications/TechnicalGuide.CRIS.pdf (p.6)
       # check on variation in days enrolled (e.g., Feb. 29 through March 2) - can we set min num of days?
 
   nsc$i.t <- FALSE
-  nsc$p.e <- FALSE
+  nsc$i.t2 <- FALSE
+  nsc$p.e1 <- FALSE
   
 
-  for (i in gradYear_shrt) {
-          
-          # it filter
-          filt.it <- expression(nsc$i.t == FALSE & 
-                                  nsc$record_found_y.n == "Y" & 
-                                  is.na(nsc$graduation_date))
+  for (i in 1:yrs) {
     
-        # immediate transition (i.t) calculation
-        nsc[eval(filt.it), "i.t"] <- nsc[eval(filt.it), "enrollment_begin"] < i*10000 + 1101 & 
-                                      nsc[eval(filt.it), "enrollment_end"] > i*10000 + 915 & 
-                                      nsc[eval(filt.it), "gradGroup"] == i & 
-                                      nsc[eval(filt.it), "enrollment_status"] %in% c("F", "")
+        nsc[nsc$i.t == FALSE, "i.t"] <- nsc[nsc$i.t == FALSE, "enrollment_begin"] < gradYear_shrt[i]*10000 + 1101 & 
+                   nsc[nsc$i.t == FALSE, "enrollment_end"] > gradYear_shrt[i]*10000 + 915 & 
+                   nsc[nsc$i.t == FALSE, "cohort"] == gradYear_shrt[i] & 
+                   nsc[nsc$i.t == FALSE, "enrollment_status"] == "F"
         
             # need to sum days across parameter-meeting enrollments b/c institutions split enrollments differently
             it <- ddply(nsc[!is.na(nsc$e.days), c("id", "i.t", "e.days")], c("id", "i.t"), summarise, 
                         immed.t = sum(i.t),
                         e.sum   = sum(e.days))
           
-            # does the sum of parameter-meeting enrollments meet our minimum number of days?
-            it$i.t2 <- it$immed.t > 0 & it$e.sum >= 54 # quarters range from 8 to 13 weeks or 56 to 91 days; 54 allows for end bf weekend
+            it$i.t <- it$immed.t > 0 & it$e.sum >= 54 # quarters range from 8 to 13 weeks or 56 to 91 days; 54 allows for end bf weekend
           
               # filter down to one row per student    
               it <- ddply(it[, c("id", "i.t2")], "id", summarise, 
-                          i.t2 = sum(i.t2) > 0)
+                          i.t = sum(i.t) > 0)
         
-              nsc[nsc$gradGroup == i, "i.t"] <- FALSE
-  
-              # keep accruing i.t TRUEs for subsequent p.e step; Assumes we only care that >= 1 record is i.t
-              nsc[nsc$i.t == FALSE & 
-                    nsc$id %in% it[it$i.t2 == TRUE, "id"], 
-                  "i.t"] <- TRUE
+                #nsc <- nsc[, -(which(names(nsc) %in% c("i.t")))]
     
-          # pe filter
-          filt.pe <- expression(nsc$p.e == FALSE & 
-                                  nsc$record_found_y.n == "Y" & 
-                                  is.na(nsc$graduation_date))
+        #nsc <- merge(nsc, it, by.x = "id", by.y = "id", all.x = TRUE)
         
-      # persistent enrollment (p.e) calculation     
-       nsc[eval(filt.pe), "p.e"] <- nsc[eval(filt.pe), "i.t"] == TRUE &
-                                      nsc[eval(filt.pe), "enrollment_begin"] < (i + 1)*10000 + 501 & 
-                                      nsc[eval(filt.pe), "enrollment_end"] > (i + 1)*10000 + 301 & 
-                                      nsc[eval(filt.pe), "gradGroup"] == i & 
-                                      nsc[eval(filt.pe), "enrollment_status"] %in% c("F", "Q", "")
-
-
-            pe <- ddply(nsc[!is.na(nsc$e.days), c("id", "p.e", "e.days")], c("id", "p.e"), summarise, 
-                        pers.e = sum(p.e),
-                        e.sum   = sum(e.days))
-          
-            pe$p.e2 <- pe$pers.e > 0 & pe$e.sum >= 54 # quarters range from 8 to 13 weeks or 56 to 91 days; 54 allows for end bf weekend
-    
-            # filter down to one row per student    
-            pe <- ddply(pe[, c("id", "p.e2")], "id", summarise, 
-                        p.e2 = sum(p.e2) > 0)
-        
-            # keep accruing p.e TRUEs; assumes we only care that >= 1 record is p.e
-              nsc[nsc$p.e == FALSE & 
-                nsc$id %in% pe[pe$p.e2 == TRUE, "id"], 
-                "p.e"] <- TRUE
-                  
+              
+              nsc[nsc$i.t == FALSE & nsc$id %in% it[!duplicated(it[it$i.t == TRUE, "id"]), "id"], "i.t"] <- TRUE
+              
   }
 
-      
+  for (i in 1:yrs) {
+                    nsc[nsc$p.e1 == FALSE, "p.e1"] <- nsc[nsc$p.e1 == FALSE, "i.t"] == TRUE & 
+                                nsc[nsc$p.e1 == FALSE, "enrollment_begin"] < (gradYear_shrt[i] + 1)*10000 + 501 & 
+                                nsc[nsc$p.e1 == FALSE, "enrollment_end"] > (gradYear_shrt[i] + 1)*10000 + 301 & 
+                                nsc[nsc$p.e1 == FALSE, "cohort"] == gradYear_shrt[i] & 
+                                nsc[nsc$p.e1 == FALSE, "enrollment_status"] %in% c("F", "Q")
+
+    
+#           # check that number of kids removed for e.days == NA is small percentage of total  !!DO WE NEED THIS CHECK??!!
+#           stopifnot((length(unique(nsc$id)) - nrow(it))/length(unique(nsc$id)) < .02)
+
+      pe <- ddply(nsc[!is.na(nsc$e.days), c("id", "p.e1", "e.days")], c("id", "p.e1"), summarise, 
+                  pers.1 = sum(p.e1),
+                  e.sum   = sum(e.days))
+    
+      pe$p.e1 <- pe$pers.1 > 0 & pe$e.sum >= 54 # quarters range from 8 to 13 weeks or 56 to 91 days; 54 allows for end bf weekend
+    
+        # filter down to one row per student    
+        pe <- ddply(pe[, c("id", "p.e1")], "id", summarise, 
+                    p.e = sum(p.e1) > 0)
+    
+#           # check that number of kids removed for e.days == NA is small percentage of total  !!DO WE NEED THIS CHECK??!!
+#           stopifnot((length(unique(nsc$id)) - nrow(it))/length(unique(nsc$id)) < .02)
+    
+        nsc <- nsc[, -(which(names(nsc) %in% c("p.e1")))]
+  }
+
+
+
+
+
+    
+
+
+
+        nsc <- merge(nsc, pe, by.x = "id", by.y = "id", all.x = TRUE)
+
+  
+    
+      mrg <- ddply(nsc[!is.na(nsc$e.days), c("id", "i.t", "p.e1", "e.days")],
+                   c("id", "p.e1") summarise, 
+                   pe1 = sum(p.e1), 
+                   i.t = sum(i.t)
+                   e.sum = sum(e.days))
+    
+        mrg$p.e <- mrg$pe1 > 0
+    
+        nsc <- merge(nsc, mrg[, c("id", "i.t", "p.e")], by.x = "id", by.y = "id", all.x = TRUE)
+                  colnames(nsc)[which(names(nsc) == "i.t.x")] <- "i.t"
+
         nsc <- unique(nsc[, c("id", "first_name", "middle_name", "last_name", 
-                              "high_school_grad_date", "gradGroup", "i.t", "p.e")])
+                              "high_school_grad_date", "cohort", "i.t", "p.e")])
 
-        nsc.model <- ddply(nsc[, c("id", "i.t", "p.e")], "id", summarise, 
-                          i.t = sum(i.t) > 0, 
-                          p.e = sum(p.e) > 0)
-
-        # check percentages relative to NSC report
-        print(mean(nsc.model$i.t))
-        print(mean(nsc.model$p.e))
-  #only use the below if enrollment_status filter is off; 
-    #also automate getting NSC reported values if possible
-  #stopifnot(.69 - mean(nsc.model$i.t) < .03)
+    
+  nsc.model <- nsc[, c("id", "i.t", "p.e")]
+    
     
 
 ##################################

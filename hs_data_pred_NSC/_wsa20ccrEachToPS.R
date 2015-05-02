@@ -124,10 +124,11 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "retained_from04", "gft_H1", "gft_from8th_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
             "schlAtt_H1", "schl_totLA", "schl_totMA", "schl_totRD", "schl_totSC", "spedCatMin_H1", 
+            "schl_totLAsq", "schl_totMAsq", "schl_totRDsq", "schl_totSCsq",
             "spedCatMod_H1", "spedCatSev_H1", "punex_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
             "ss_totSCsq", "schl_fg", "schl_fsl",
-            "schl_sei_all", "target")
+            "schl_sei_all", "schl_gini_index", "schl_sep_index", "target")
 
 evYr  <- "startyear_grade_E"
 zoned <- c("zoned_school_E", "zoned_school_name_E")

@@ -101,6 +101,7 @@ cd "${ssipath}"
 	global		histyr5		"07"		// historic year 5 - needed for CRCTs
 	
 * 	globals to control functions when wanting to not overwrite on re-runs
+	global		log			"*log"
 	global		save		"save"
 	global		export		"export"
 	global		graph		"graph"
@@ -144,7 +145,7 @@ exit
 */
 
 if $extract==1	{
-log using code/logfiles/extract.smcl, replace
+${log} using code/logfiles/extract.smcl, replace
 
 **************************
 *gcps to state schl codes
@@ -1218,7 +1219,7 @@ odbc load, clear exec("
 
 
 
-log close
+${log} close
 
 
 		}
@@ -1226,7 +1227,7 @@ log close
 
 if $calc==1 {
 
-log using code/logfiles/calc.smcl, replace
+${log} using code/logfiles/calc.smcl, replace
 
 ************************************
 * Historic year school-level values
@@ -1799,13 +1800,13 @@ keep id startyear_grade20${evalyr}  startyear_grade20${nxtyr}
 save data/prep/promotion_hs, replace
 
 
-log close
+${log} close
 
 }
 
 if $merge_all==1 {
 
-log using code/logfiles/merge_all.smcl, replace
+${log} using code/logfiles/merge_all.smcl, replace
 
 * MODEL DATASET
 ****************
@@ -2116,7 +2117,7 @@ if $scoring==1 {
 														replace give_phx_ind = 0 if give_phx_ind==.
 	
 
-	log close
+	${log} close
 
 	}
 	

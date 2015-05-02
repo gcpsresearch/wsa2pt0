@@ -16,12 +16,6 @@ packages <- c("plyr", "dplyr", "reshape", "reshape2", "ggplot2", "grid", "catspe
 
 lapply(packages, require, character.only=T)
 
-# modeling matrix
-mod.m <- cbind(c(rep("PSmodel", 9), 12:5), 
-				c(12:4, 11:4), 
-				c(2012,2012,2011,2011,2012,2012,2011,2012,2011, 
-					c(rep(2012,8))))
-
 #rm(list=ls()) 
 path <- readLines("c:\\current_path.txt")
 
@@ -75,9 +69,8 @@ warning_handling <- function(code) {
 # set two grade levels for run
 grds <- 12:11
 
-# 
-
 # set years for graduation data
+
 cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2013 doesn't have 4 semesters of time yet
 
 yrs <- length(cohortYear_shrt)  # number of years set below
@@ -136,31 +129,31 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "schlAtt_H1", "schl_totLA", "schl_totMA", "schl_totRD", "schl_totSC", "spedCatMin_H1", 
             "spedCatMod_H1", "spedCatSev_H1", "punex_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
-            "ss_totSCsq", "schl_fg", "schl_fsl", "schl_sei_all", "schl_gini_index", "schl_sep_index", "target", 
-			"schl_totLAsq", "schl_totMAsq", "schl_totRDsq", "schl_totSCsq")
+            "ss_totSCsq", "schl_fg", "schl_fsl",
+            "schl_sei_all", "target")
 
 evYr  <- "startyear_grade_E"
 zoned <- c("zoned_school_E", "zoned_school_name_E")
 g8 <-     zoned 
 g9 <-     c("la_credits", "ma_credits", "sc_credits", "ss_credits", "percCore", "percOth", 
             "ap_ib_pass_H1", "ap_ib_pass_from8th_H1", g8, 
-            "z_9th_H1", "z_ALG_H1", "z_AME_H1", "z_BIO_H1", "z_ECO_H1", 
-			"z_GEO_H1", "z_MA1_H1", "z_MA2_H1", "z_PHY_H1", "z_USH_H1")
+            "z_9th", "z_ALG", "z_AME", "z_BIO", "z_ECO", "z_GEO", "z_MA1", "z_MA2", "z_PHY", "z_USH")
 g10 <-    c(g9, "psat_scoreCR", "psat_scoreMA", "psat_scoreWR", "psat_collReady", 
             "ap_ib_dual")
 
-g11 <-    c(g10, "scoreMA_H1", "scoreVE_H1", "psr_H1")
+g11 <-    c(g10, "scoreMA", "scoreVE", "psr")
 
 g12 <-    g11
 
-fixed <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1",  
+factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1", 
+             "loc_H1", "mafail_H1", "scfail_H1", "ssfail_H1", "corefail_H1", 
              "lafail_from8th_H1", "mafail_from8th_H1", "scfail_from8th_H1", 
-             "ssfail_from8th_H1", "corefail_from8th_H1", "gft_H1",
-             "ap_ib_pass_from8th_H1", "gft_from8th_H1",  
+             "ssfail_from8th_H1", "corefail_from8th_H1", "ap_ib_pass_H1", 
+             "gft_H1", "psr",
+             "ap_ib_pass_from8th_H1", "gft_from8th_H1", "psat_collReady", 
              "retained_from04", "female", "black", "hispanic", "other", 
-             "frl_H1", "lep_H1", "repgrd_H1", "target")
-factors <- c("lafail_H1", "mafail_H1", "scfail_H1", "ssfail_H1", "corefail_H1", 
-				"ap_ib_pass_H1", "psat_collReady", "ap_ib_dual", "psr")
+             "frl_H1", "lep_H1", "repgrd_H1", "target",
+             "ap_ib_dual")
 
 disc <- c("dsevmx_H1", "dsevmn_H1", "drate_H1")
 
@@ -190,7 +183,7 @@ lapply(c("cohorts.nsc", "ap.agg", "ib.agg"), function(x) {
 rm(e, e2)
 gc()
 
-cohorts.nsc <- cohorts.nsc[,c("id", "i.t", "p.e", "system.id")]
+cohorts.nsc <- cohorts.nsc[,c("id", "i.t", "p.e")]
 
 for (p in grds) {
   
@@ -200,73 +193,36 @@ for (p in grds) {
   if(p.grd == max(grds)) {
     run <- "PSmodel"
   } else {
-	run <- ps.m[p.grd + 1, 2]
+    run <- ps.m[p.grd + 1, 3]
   }
   
   
   
   # load and clean data
-
-
   df <- read.csv(paste0("..\\student.success.factor\\data\\prep\\", p.grd, "th", 
-                        p.grd + 1, "th_model_only_",
- 						mod.m[mod.m[,1]==paste0(run) & mod.m[,2]==p, 3], ".csv"), sep=",", 
+                        p.grd + 1, "th_model_only", ".csv"), sep=",", 
                  header = TRUE)
-			
-if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}		
-			
   names(df)[which(names(df) %in% c("la", "ma", "sc", "ss"))] <- c("la_credits", "ma_credits", "sc_credits", "ss_credits")
-
-  # add school-level gini and SEP
-  df1 <- data.table(df[!is.na(df$gini_index_H1) & !is.na(df$sep_index_H1), 
-	c("zoned_school_E", "zoned_school_name_E", "gini_index_H1", "sep_index_H1")])
-  keycols  <- c("zoned_school_E", "zoned_school_name_E")
-  df1.agg <- df1[,.(mean(gini_index_H1), mean(sep_index_H1)), by = "zoned_school_E,zoned_school_name_E"]
-	df1.agg <- as.data.frame(df1.agg)
-	names(df1.agg)[which(names(df1.agg) %in% c("V1", "V2"))] <- c("schl_gini_index_H1", "schl_sep_index_H1")
-	
-	df <- merge(df, df1.agg[, c(1, 3:4)], by.x = "zoned_school_E", by.y = "zoned_school_E", all.x = TRUE)
   
   if(p.grd >= 11) {
     #create post-secondary-ready indicator (psr)
     # SAT M and CR >= 520 OR
-    df$psr_H1 <- 
+    df$psr <- 
       
-      ((!is.na(df[, which(names(df)=="scoreMA_H1")]) & 
-          df[, which(names(df)=="scoreMA_H1")] >= 520 & 
-          !is.na(df[, which(names(df)=="scoreVE_H1")]) & 
-          df[, which(names(df)=="scoreVE_H1")] >= 520) |
+      ((!is.na(df[, which(names(df)=="scoreMA")]) & 
+          df[, which(names(df)=="scoreMA")] >= 520 & 
+          !is.na(df[, which(names(df)=="scoreVE")]) & 
+          df[, which(names(df)=="scoreVE")] >= 520) |
          
          # ACT E >= 18 and M and R >= 22 OR
-         (!is.na(df[, which(names(df)=="scoreaEN_H1")]) & 
-            df[, which(names(df)=="scoreaEN_H1")] >= 18 & 
-            !is.na(df[, which(names(df)=="scoreaMA_H1")]) & 
-            df[, which(names(df)=="scoreaMA_H1")] >= 22 & 
-            !is.na(df[, which(names(df)=="scoreaRD_H1")]) & 
-            df[, which(names(df)=="scoreaRD_H1")] >= 22))
+         (!is.na(df[, which(names(df)=="scoreaEN")]) & 
+            df[, which(names(df)=="scoreaEN")] >= 18 & 
+            !is.na(df[, which(names(df)=="scoreaMA")]) & 
+            df[, which(names(df)=="scoreaMA")] >= 22 & 
+            !is.na(df[, which(names(df)=="scoreaRD")]) & 
+            df[, which(names(df)=="scoreaRD")] >= 22))
     
-    df$psr_H1 <- ifelse(df$psr_H1 == TRUE, 1, 0)
-  }
-
-  if(p.grd >= 10) {
-    #create post-secondary-ready indicator (psr)
-    # SAT M and CR >= 520 OR
-    df$psr_E <- 
-      
-      ((!is.na(df[, which(names(df)=="scoreMA_E")]) & 
-          df[, which(names(df)=="scoreMA_E")] >= 520 & 
-          !is.na(df[, which(names(df)=="scoreVE_E")]) & 
-          df[, which(names(df)=="scoreVE_E")] >= 520) |
-         
-         # ACT E >= 18 and M and R >= 22 OR
-         (!is.na(df[, which(names(df)=="scoreaEN_E")]) & 
-            df[, which(names(df)=="scoreaEN_E")] >= 18 & 
-            !is.na(df[, which(names(df)=="scoreaMA_E")]) & 
-            df[, which(names(df)=="scoreaMA_E")] >= 22 & 
-            !is.na(df[, which(names(df)=="scoreaRD_E")]) & 
-            df[, which(names(df)=="scoreaRD_E")] >= 22))
-    
-    df$psr_E <- ifelse(df$psr_E == TRUE, 1, 0)
+    df$psr <- ifelse(df$psr == TRUE, 1, 0)
   }
   
   # use best prior predictors if exist and convert to evalyr equivalents
@@ -321,35 +277,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim) & df$ontimeGrad == 1
       df <- df[,1:pre.dim]
       
-    } # END IF p.grd == 11 p.grd < max(grds))
-	
-	 if (p.grd < 11 & p.grd > 8 & p.grd < max(grds)) {
-      df$target <- FALSE
-      # end of year grade is p.grd + 1 AND
-      
-      pre.dim <- dim(df)[2]
-      
-      for(i in 1:dim(bal.f.clr)[2]) {
-        
-        #requires less than threshold for negative coeffs and more than for positive coeffs
-        if((go.coeffs[-1])[i] >= 0) {
-          df[,dim(df)[2] + 1] <- 
-            df$startyear_grade_N == p.grd + 1 & 
-            !is.na(df[, names(bal.f.clr)[i]]) & 
-            df[, names(bal.f.clr)[i]] >= round(bal.f.clr[,i], 2)
-        } else if ((go.coeffs[-1])[i] <= 0) {
-          df[,dim(df)[2] + 1] <- 
-            df$ontimeGrad == 1 &
-            !is.na(df[, names(bal.f.clr)[i]]) & 
-            df[, names(bal.f.clr)[i]] <= round(bal.f.clr[,i], 2)
-        }
-      }
-      
-      #df1 <- df[, c(names(bal.f.clr), "ontimeGrad")]
-      df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim) & df$startyear_grade_N == p.grd + 1
-      df <- df[,1:pre.dim]
-      
-    } # END IF p.grd == 11 p.grd < max(grds))
+    } # END IF p.grd
     
   }
   
@@ -378,7 +306,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
     dfm[!is.na(dfm$psat_scoreWR) & dfm$psat_scoreWR == 0, 
         which(names(dfm) == "psat_scoreWR")] <- NA
   }
-
+  
   #### LOAD DUAL ENROLLMENT DATA ####
   ####===========================####
   ma_ch <- odbcConnect("ODS_Prod_MA", uid = "Research", pwd = "Research")
@@ -403,7 +331,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
   
   dual <- case.cols("dual")
   names(dual)[which(names(dual) == "permnum")] <- "id"
-  dual$mark.t <- dual$mark_numeric >=80
+  dual$mark.t <- dual$mark_numeric >=90
   
   dual <- data.table(dual)
   
@@ -481,8 +409,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
     rem2 <- lapply(names(rem), function(x) gsub("ss_", "schl_", x))
     dfm <- dfm[, -(which(names(dfm) %in% c(names(rem), unlist(rem2))))]
   }
-
-
+  
   # add polynomials
   for(i in c(which(names(dfm) %in% c("ss_totLA", "ss_totMA", "ss_totRD", 
                                      "ss_totSC", "schl_totLA", 
@@ -1045,7 +972,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
     c <- xyplot(calCurve, auto.key = list(columns = 2), 
                 main = paste0("Calibration of ", ps[1,1], " Model-based Probabilities: \nFailing to ", 
                               "Persist in Post-Secondary Against True Probabilities \n Predicting ",
-                              "from grade: ", p.grd, " to grade ", run))
+                              "from grade: ", p.grd, " to grade ", ps.m[p.grd + 1, 2]))
     print(c)
     dev.off()
     
@@ -1078,7 +1005,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
                          "_", ps[1,1], "_ProbSuccess", ".png", sep = ""),
         width = 700, height = 700)
     h <- histogram(~mProbs$Yes|tst$Class,
-                   xlab = paste0(ps[1,1], " Probability of Success in ", run, 
+                   xlab = paste0(ps[1,1], " Probability of Success in ", ps.m[p.grd + 1, 3], 
                                  " Grade"))
     print(h)
     dev.off()
@@ -1424,7 +1351,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       int <- int[, -which(unlist(lapply(names(int), function(x) 
         grepl('fail|psat', x, ignore.case = TRUE))))]
       rm2 <- train[, which(unlist(lapply(names(train), function(x) 
-        grepl('schl_|_from|zoned|pct_|schlAtt_|schlEnr_|mob_H1|schlFRL|percentEnrolled|ss_|fg_|fsl_|sei|la_credits|ma_credits|sc_credits|ss_credits|sep_|gini_', x, ignore.case = TRUE))))]
+        grepl('schl_|_from|zoned|pct_|schlAtt_|schlEnr_|mob_H1|schlFRL|percentEnrolled|ss_|fg_|fsl_|sei|la_credits|ma_credits|sc_credits|ss_credits', x, ignore.case = TRUE))))]
       
       glmData <- train[, -which(names(train) %in% c(names(int), names(rm2))), ]
       
@@ -1520,29 +1447,16 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
                         sd(x, na.rm = TRUE))
       
       go.mxs <- apply(as.data.frame(glmData[complete.cases(glmData), 1:length(go.coeffs) - 1]), 2, function(x) 
-        quantile(x, .95, na.rm = TRUE))
+        max(x, na.rm = TRUE))
       
       # set any GPA variables to just 1.5 SD above mean
       go.mxs[grepl("GPA", names(go.mxs))] <- go.mns[grepl("GPA", names(go.mns))] + 1.5*go.sds[grepl("GPA", names(go.sds))]
       
       go.mins <- apply(as.data.frame(glmData[complete.cases(glmData), 1:length(go.coeffs) - 1]), 2, function(x) 
-        quantile(x, .05, na.rm = TRUE))
+        min(x, na.rm = TRUE))
       
       # set any percent absent variables to fixed value
-      #go.mins[grepl("pabs|punex", names(go.mins))] <- go.mns[grepl("pabs_|punex_", names(go.mns))] - 1*go.sds[grepl("pabs_|punex_", names(go.sds))]
-	  #go.mxs[grepl("pabs|punex", names(go.mxs))] <- go.mns[grepl("pabs_|punex_", names(go.mns))] - 1*go.sds[grepl("pabs_|punex_", names(go.sds))]
-	
-	  # set mins and maxes to best value for factors
-		# 1 is best
-	  go.mins[grepl("ap_ib_pass_H1|psat_collReady|ap_ib_dual|psr", names(go.mins))] <- 1
-	  go.mxs[grepl("ap_ib_pass_H1|psat_collReady|ap_ib_dual|psr", names(go.mxs))] <- 1
-		# 0 is best
-	  go.mins[grepl("lafail_H1|mafail_H1|scfail_H1|ssfail_H1|corefail_H1", names(go.mins))] <- 0
-	  go.mxs[grepl("lafail_H1|mafail_H1|scfail_H1|ssfail_H1|corefail_H1", names(go.mxs))] <- 0
-	
-		go.match <- go.mxs - go.mins > .00001
-		if(go.coeffs[-1][go.match] < 0) go.mns[go.match] <- go.mns[go.match] + go.sds[go.match]
-		if(go.coeffs[-1][go.match] >= 0) go.mns[go.match] <- go.mns[go.match] - go.sds[go.match]
+      go.mins[grepl("pabs", names(go.mins))] <- go.mns[grepl("pabs_", names(go.mns))] - 1*go.sds[grepl("pabs_", names(go.sds))]
       
       go.mn_min_SD <- go.mns - go.sds
       
@@ -1588,8 +1502,8 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       
       names(bal)[c(1, dim(bal)[2])] <- c("intercept", "probability")
       
-      if(p.grd == 12) {bal.f <- bal[bal$probability >= .67, ]}
-      if(p.grd < 12) {bal.f <- bal[bal$probability >= .67, ]}
+      if(p.grd == 12) {bal.f <- bal[bal$probability >= .60, ]}
+      if(p.grd < 12) {bal.f <- bal[bal$probability >= .60, ]}
       bal.f <- bal.f[bal.f$probability == min(bal.f$probability), 
                      -(c(1, dim(bal.f)[2]))]
       
@@ -1786,7 +1700,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       plt <- plt + geom_point(size = 3, position = "Jitter", colour = "grey60")
       plt <- plt + stat_smooth(span = 0.9, method = "loess", size = 1, colour = "black")
       plt <- plt + stat_smooth(method = "lm", size = 1.5)
-      plt <- plt + ggtitle(paste0("CCRG: ", p, "th to ", ps.m[p.grd + 1, 3], " Grade \n(r = ", 
+      plt <- plt + ggtitle(paste0("CCROTG: ", p, "th to ", ps.m[p.grd + 1, 3], " Grade (r = ", 
                                   round(cor(final.mrg[, 6], final.mrg[, 7]), 2), "; ", 
                                   "R-squared = ", round(cor(final.mrg[, 6], 
                                                             final.mrg[, 7])**2, 2), ")"))

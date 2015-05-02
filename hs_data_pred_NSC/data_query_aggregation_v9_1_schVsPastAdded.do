@@ -2,16 +2,7 @@ set more off, permanently
 log close _all
 clear all
 
-********
-* setup
-********
-{
 /* updates
-2015.04.13  - added evaluated year data so more variables can be used as outcomes
-			  if selected by our predictive models
-2015.04.07	- updated so can be used with other years (e.g., 2012 hist to 2013 eval)
-			  - added z-scored versions of EOCTs
-
 2015.04.03	- added 12th predicting 13th (post-sec persist from NSC)
 
 2015.03.13	- changed some census variables to gini and deprivation
@@ -98,19 +89,18 @@ global ssipath = "`path'\RBES\WSA 2.0\student.success.factor"
 drop path
 cd "${ssipath}"
 
+	global		crctMin		650			// set min scale score for CRCT
 	global		yrsbk		"3"			// years back from end yr of current 
 											* academic year; e.g., 3 in 14-15
 											* year sets grad year as 2015-3 = 2012
 	
-	global		nxtyr2		"14"		// 2 years beyond evaluated
 	global		nxtyr		"13"		// year beyond evaluated
 	global		evalyr		"12"		// evaluated year
 	global		histyr1		"11"		// historic year 1
 	global		histyr2		"10"		// historic year 2
 	global 		histyr3		"09"		// historic year 3
 	global		histyr4		"08"		// historic year 4
-	global		histyr5		"07"		// historic year 5 
-	global		histyr6		"06"		// historic year 6 - needed for CRCTs
+	global		histyr5		"07"		// historic year 5
 	
 * 	globals to control functions when wanting to not overwrite on re-runs
 	global		save		"save"
@@ -154,7 +144,7 @@ program define cls2
 end
 exit
 */
-}
+
 if $extract==1	{
 log using code/logfiles/extract.smcl, replace
 
@@ -163,10 +153,9 @@ log using code/logfiles/extract.smcl, replace
 **************************
 	#delimit ;
 		odbc load, clear exec	("
-									SELECT distinct  [LOC]
-													,[SCH_CODE]
-									FROM [GSDR].[GEMS].[SDR_SCHOOL_B]
-									WHERE SCH_YR = 20${histyr1}
+									SELECT distinct [LOC]
+										  ,[SCH_CODE]
+									  WHERE SCH_YR = 20${histyr1}
 								")
 			dsn(ODS_Prod_RE) user(Research) pass(Research) ;
 	#delimit cr
@@ -182,7 +171,7 @@ log using code/logfiles/extract.smcl, replace
 save data/prep/stateNum_to_gcpsNum_link, replace
 
 *******************************************************************************
-* evaluated year data  (have from SchoolYear = 2014 to 2004)
+* evaluated year data
 *******************************************************************************
 	#delimit ;
 		odbc load, clear exec	("
@@ -672,7 +661,7 @@ ${save} data\prep\mobility${histyr2}${histyr1}_hs, replace
 		odbc load, clear exec	("
 			SELECT * 
 			FROM 	Assessment.dbo.TEST_STU_CRT 
-			WHERE 	EXAM_ADMIN_DATE > 20${histyr6}0801 and 
+			WHERE 	EXAM_ADMIN_DATE > 20${histyr5}0201 and 
 					EXAM_ADMIN_DATE < 20${evalyr}0801 and SUBJECT!= 'SS'
 								")
 		dsn(ODS_Prod_Assm) user(Research) pass(Research);
@@ -700,7 +689,7 @@ ${save} data/orig/crct_hs, replace
 								//better than no achievement proxy
 
 		*remove those with 0 since not possible (is missing?)
-		drop if ss_tot==. | ss_tot==0
+		drop if ss_tot==. | ss_tot==0 | ss_tot < 650
 
 		*create yr grade subj
 		gen tname = "CRCT"
@@ -774,7 +763,7 @@ ${save} data/orig/gpa_hs, replace
 					,[EndYear_Grade]      
 					,[StartYear_Grade]
 			  FROM 	[Predictive_Analytics].[PAVIEW2].[v_Student_Retention_History]
-			WHERE 	SchoolYear in (20${histyr1}, 20${evalyr}, 20${nxtyr}, 20${nxtyr2})")
+			WHERE 	SchoolYear in (20${histyr1}, 20${evalyr}, 20${nxtyr}, 2014)")
 		dsn(ODS_Prod_PA) user(Research) pass(Research);
 	#delimit cr
 		foreach var of varlist* { 
@@ -1013,12 +1002,11 @@ ${save} data/prep/yearstograd, replace
 				  ,[sei_all]
 			  FROM [Assessment].[dbo].[SEI]
 			  WHERE season = 'Spring' and
-					school_year in (20${histyr3}, 20${histyr2}, 20${histyr1}, 
-					20${evalyr}) or
+					school_year in (20${histyr3}, 20${histyr2}, 20${histyr1}) or
 					season = 'Fall' and school_year in (20${histyr4}, 20${histyr3}, 
-					20${histyr2}, 20${histyr1})
+					20${histyr2})
 							")
-		dsn(ODS_Prod_MA) user(Research) pass(Research);
+		dsn(ODS_Prod_Assm) user(Research) pass(Research);
 	#delimit cr
 		foreach var of varlist* { 
 			destring `var', replace
@@ -1027,23 +1015,11 @@ ${save} data/prep/yearstograd, replace
 		rename student_id id
 		
 preserve
-	keep if (season == "Spring" & school_year < 20${evalyr}) | 
-		(season == "Fall" & school_year < 20${histyr1})
 	collapse (mean) schl_fg = fg schl_fsl = fsl schl_sei_all = sei_all, by(loc)
 	rename loc loc_${histyr2}${histyr1}
 	save data/prep/schl_sei, replace
 restore
-	gen currYr = "_H1" 
-	replace currYr = "_E" if (season == "Spring" & school_year == 20${evalyr}) | ///
-		(season == "Fall" & school_year == 20${histyr1})
-		
-	collapse (mean) fg fsl sei_all, by(id loc season currYr)
-		
-	reshape wide fg fsl sei_all, i(id loc season) j(currYr) s
-	collapse (mean) fg* fsl* sei_all*, by(id)
-	
-
-
+	collapse (mean) fg fsl sei_all, by(id)
 
 ${save} data/prep/sei, replace
 
@@ -1090,6 +1066,221 @@ insheet using "data/orig/EOCT_GRAD_REQ.csv", c clear
 *************************************************
 
 * maurice checking; contacted michael quast on 
+
+**************************************************
+* EOCT Assessment Results
+**************************************************
+#delimit ;
+		odbc load, clear exec("
+SELECT [SCHOOL_YR]
+      ,[STUNUMB]
+      ,[SUBJECT]
+      ,[EXAM_ADMIN_DATE]
+      ,[GRADE]
+      ,[LOC]
+      ,[TOTAL_PERF_LEVEL]
+      ,[TOTAL_SCALE_SCORE]
+FROM [Assessment].[dbo].[TEST_STU_ECT]
+WHERE EXAM_ADMIN_DATE >= 20${histyr3}0801 and
+	  EXAM_ADMIN_DATE <= 20${evalyr}0731 
+")
+		dsn(ODS_Prod_Assm) user(Research) pass(Research);
+	#delimit cr
+	
+	${outsheet} using data/orig/act${histyr4}${evalyr}.csv, c replace
+
+	foreach var of varlist* { 
+		destring `var', replace
+		rename `var' `=lower("`var'")'
+		}
+			replace subject = trim(subject)
+
+		duplicates drop
+		rename school_yr year
+		rename exam_admin_date date
+		rename stunumb id
+		rename total_scale_score ss_tot
+		format id %13.0f
+		
+		*remove those with 0 since not possible (is missing?)
+		drop if ss_tot==. | ss_tot==0
+
+		*create yr grade subj
+		gen tname = "EOCT"
+		egen test = concat(year tname subject), p(" ")
+		drop tname
+		tab test, m
+
+*see if only one year-test-grade-subject comb for each student
+		duplicates report id test
+		
+* keep only latest year-test-grade-subject combination per year
+		bys id test (date): gen n = _n
+		tab n, m
+		bys id test: egen max_n = max(n)
+		keep if n == max_n
+		isid id test
+			drop n max_n
+			
+		* keep latest grade subject result 
+			* (sort by year-test-grade-subject to choose)
+		bys id subject (test): gen n = _n
+		tab n, m
+		bys id subject: egen max_n = max(n)
+		keep if n == max_n
+		isid id subject
+		drop n max_n
+		order id loc year grade test date subject
+		sort id year
+
+*********************
+* calculate z-scores
+*********************
+	
+	* historic year 2
+	***************
+		* set path
+		local crt_pth = "${path}\RBES\" +  ///
+		"Description\Original_DOE-CRCT-EOCT-HSGT_Mns-SDs"
+	
+	* bring in values from GA DOE
+preserve
+	foreach su in 9TH AMLIT BIO ECO MAI MAII PHY USH {
+		import excel using /// 
+		"`crt_pth'\20${histyr2}\State with SD only\EOCT_SP10_`su'_State.xls", ///
+			sheet("EOCT_SP10_`su'_State") cellrange(B2:G3) firstrow clear
+				keep MeanScaleScore StandardDeviation
+				rename(MeanScaleScore StandardDeviation) ///
+					  (mn sd) 
+			gen subject = "`su'"
+			gen year = 20${histyr2}
+			tempfile eoct_`su'_ga_$histyr2
+			save `eoct_`su'_ga_$histyr2', replace
+		}
+	use `eoct_9TH_ga_$histyr2', clear
+		append using `eoct_AMLIT_ga_$histyr2'
+		append using `eoct_BIO_ga_$histyr2'
+		append using `eoct_ECO_ga_$histyr2'
+		append using `eoct_MAI_ga_$histyr2'
+		append using `eoct_MAII_ga_$histyr2'
+		append using `eoct_PHY_ga_$histyr2'
+		append using `eoct_USH_ga_$histyr2'
+		
+		replace subject = "MA1" if subject == "MAI"
+		replace subject = "MA2" if subject == "MAII"
+		replace subject = "AME" if subject == "AMLIT"
+		replace subject = "ECO" if subject == "ECON"
+
+	tempfile eoct_mean_sd_$histyr2
+	save `eoct_mean_sd_$histyr2', replace
+	
+restore
+
+* historic year 1
+	***************
+		* set path
+		local crt_pth = "${path}\RBES\" +  ///
+		"Description\Original_DOE-CRCT-EOCT-HSGT_Mns-SDs"
+		* bring in values from GA DOE
+preserve
+	foreach su in 9TH AMLIT BIO ECON MAI MAII PHY USH {
+		import excel using /// 
+		"`crt_pth'\20${histyr1}\EOCT_SP20${histyr1}_State_Summaries\SP${histyr1}_state_`su' with SD.xls", ///
+			sheet("SP11_state_`su'") cellrange(A2:I3) firstrow clear
+				keep MeanScaleScore StandardDeviation
+				rename(MeanScaleScore StandardDeviation) ///
+					  (mn sd) 
+			gen subject = "`su'"
+			gen year = 20${histyr1}
+			tempfile eoct_`su'_ga_$histyr1
+			save `eoct_`su'_ga_$histyr1', replace
+		}
+	use `eoct_9TH_ga_$histyr1', clear
+		append using `eoct_AMLIT_ga_$histyr1'
+		append using `eoct_BIO_ga_$histyr1'
+		append using `eoct_ECON_ga_$histyr1'
+		append using `eoct_MAI_ga_$histyr1'
+		append using `eoct_MAII_ga_$histyr1'
+		append using `eoct_PHY_ga_$histyr1'
+		append using `eoct_USH_ga_$histyr1'
+		
+		replace subject = "MA1" if subject == "MAI"
+		replace subject = "MA2" if subject == "MAII"
+		replace subject = "AME" if subject == "AMLIT"
+		replace subject = "ECO" if subject == "ECON"
+
+	tempfile eoct_mean_sd_$histyr1
+	save `eoct_mean_sd_$histyr1', replace
+	
+restore
+
+* evaluation year 1
+	***************
+		* set path
+		local crt_pth = "${path}\RBES\" +  ///
+		"Description\Original_DOE-CRCT-EOCT-HSGT_Mns-SDs"
+		* bring in values from GA DOE
+preserve
+	foreach su in 9TH AMLIT BIO ECON MAI MAII PHY USH ALG GEO {
+		import excel using /// 
+		"`crt_pth'\20${evalyr}\SP${evalyr}_state_`su' with SD.xls", ///
+			sheet("SP12_state_`su'") cellrange(A2:I3) firstrow clear
+				keep MeanScaleScore StandardDeviation
+				rename(MeanScaleScore StandardDeviation) ///
+					  (mn sd) 
+			gen subject = "`su'"
+			gen year = 20${evalyr}
+			tempfile eoct_`su'_ga_$evalyr
+			save `eoct_`su'_ga_$evalyr', replace
+		}
+	use `eoct_9TH_ga_$evalyr', clear
+		append using `eoct_AMLIT_ga_$evalyr'
+		append using `eoct_BIO_ga_$evalyr'
+		append using `eoct_ECON_ga_$evalyr'
+		append using `eoct_MAI_ga_$evalyr'
+		append using `eoct_MAII_ga_$evalyr'
+		append using `eoct_PHY_ga_$evalyr'
+		append using `eoct_USH_ga_$evalyr'
+		append using `eoct_ALG_ga_$evalyr'
+		append using `eoct_GEO_ga_$evalyr'		
+		
+		replace subject = "MA1" if subject == "MAI"
+		replace subject = "MA2" if subject == "MAII"
+		replace subject = "AME" if subject == "AMLIT"
+		replace subject = "ECO" if subject == "ECON"
+	tempfile eoct_mean_sd_$evalyr
+	save `eoct_mean_sd_$evalyr', replace
+
+restore
+
+preserve
+
+use `eoct_mean_sd_$evalyr', clear
+append using `eoct_mean_sd_$histyr1'
+append using `eoct_mean_sd_$histyr2'
+tempfile save eoct_mean_sd_final
+save `eoct_mean_sd_final'
+
+restore
+	* merge with current dataset
+	merge m:1 subject year using `eoct_mean_sd_final', nogen keep(1 3) ///
+								keepus(mn sd)
+
+	* check no missing state data and calculate z-scores
+	gen double z = .
+	bysort year subject: replace z = (ss_tot - mn)/ sd
+					
+					* check transformation is linear
+					scatter ss z, by(subject year) 
+					${graph} export results/graphs/`subj'`yr'z_eth.wmf, replace
+
+		codebook
+		summarize
+keep id year subject ss_tot z
+rename (ss_tot z) (ss_ z_)
+reshape wide ss_ z_, i(id year) j(subject) string
+
+save data/prep/eoct${histyr2}${evalyr}, replace
 
 **************************************************
 * ACT Assessment Results
@@ -1269,69 +1460,79 @@ log using code/logfiles/calc.smcl, replace
 	* uses data prepared for SARs
 ************************************
 
+**!! Changed from keep(1 3) to keep(3) to avoid Ivy Prep missing loc error
+
 * path to SARs data
 local p = "S:\Superintendent\Private\Strategy & Performance\ResearchEvaluation\RBES\" + ///
 			"School Accountability Rpts\Issued 20" + "${histyr1}" + "-" + "${evalyr}" + ///
-			" (For 20" + "${histyr2}" + "-" + "${histyr1}" + ")\Student\data_prep"
+			" (For 20" + "${histyr2}" + "-" + "${histyr1}" + ")\Student\data\prep"
 
 preserve
 
-	* school size, % white
+	* school size, % white (from 2010-11 on)
 	use "`p'\FT002_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
-	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(3)
 		assert loc != .
-		isid loc Grade Gender
-	collapse (sum) White TotalEnrollment, by(loc)
-		gen schl_percWht_H1 = White/TotalEnrollment
+				if (20${histyr1} >= 2011) {
+						isid loc Grade Gender
+					collapse (sum) White TotalEnrollment, by(loc)
+						gen schl_percWht_H1 = White/TotalEnrollment
+						drop White
+				}
 	rename TotalEnrollment schlEnr_H1
-		drop White
 	save data/prep/schl_enr, replace
 
-	* school %esol, %sped
-	
+	* school %sped (from 2009-10 on)
 	use "`p'\FT004_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
-	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(3)
 		assert loc != .
-		isid loc Program Gender
-			keep if Program == "Special Education"
-	collapse (sum) TotalEnrollment, by(loc)
-		merge 1:1 loc using data/prep/schl_enr, nogen keep(1 3)
-		gen schl_percSPED_H1 = TotalEnrollment/schlEnr_H1
+				if (20${histyr1} >= 2011) {
+						isid loc Program Gender
+							keep if Program == "Special Education"
+					collapse (sum) TotalEnrollment, by(loc)
+				}
+						merge 1:1 loc using data/prep/schl_enr, nogen keep(1 3)
+						gen schl_percSPED_H1 = TotalEnrollment/schlEnr_H1
 		keep loc schl_percSPED_H1
 	save data/prep/schl_sped, replace	
 	
+	* school %esol (from 2010-11 on)
 	use "`p'\FT003_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
-	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(3)
 		assert loc != .
-		isid loc Program Gender
-			keep if Program == "ESOL-Total"
-	collapse (sum) TotalEnrollment, by(loc)
-		merge 1:1 loc using data/prep/schl_enr, nogen keep(1 3)
-		gen schl_percESOL_H1 = TotalEnrollment/schlEnr_H1
-		keep loc schl_percESOL_H1
+				if (20${histyr1} >= 2011) {
+						isid loc Program Gender
+							keep if Program == "ESOL-Total"
+					collapse (sum) TotalEnrollment, by(loc)
+				}
+					merge 1:1 loc using data/prep/schl_enr, nogen keep(1 3)
+					gen schl_percESOL_H1 = TotalEnrollment/schlEnr_H1
+	keep loc schl_percESOL_H1
 	save data/prep/schl_esol, replace	
 		
-	* % FRPL
+	* school % FRPL (from 2009-10 on)
 	use "`p'\FRPL_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
-	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(3)
 		assert loc != .
 		isid loc
 	rename PercentEligibleFreeOrReduced schlFRL_H1
 		keep loc schlFRL_H1
+		replace schlFRL_H1 = schlFRL_H1*.01
 	save data/prep/schl_frl, replace
 
-	* % enrolled days attended
+	* school % enrolled days attended (from 2009-10 on)
 	use "`p'\ENR021_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
-	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(3)
 		assert loc != .
 		isid loc
 	rename AverageDailyAttendance schlAtt_H1
 		keep loc schlAtt_H1
+		replace schlAtt_H1 = schlAtt_H1*.01
 	save data/prep/schl_att, replace
 
 restore
@@ -1939,6 +2140,8 @@ use data/orig/histyr_hs, clear
 	merge 1:1 id using data/prep/coursesTowardGrad, nogen keep(1 3)
 	merge 1:1 id using data/prep/sat${histyr4}${evalyr}, nogen keep(1 3)
 	merge 1:1 id using data/prep/act${histyr4}${evalyr}, nogen keep(1 3)
+	merge 1:1 id using data/prep/eoct${histyr2}${evalyr}, nogen keep(1 3)
+
 	merge 1:1 id using data/prep/promotion_hs, nogen keep(1 3)
 	merge 1:1 id using data/orig/fay_evalyr_hs, nogen keep(1 3)
 	merge 1:1 id using data/prep/failcore_rigorInd, nogen keep(1 3)
@@ -1950,8 +2153,8 @@ use data/orig/histyr_hs, clear
 	
 	* summarize prior crct score by school
 	preserve
-		collapse (mean) schl_LAcrct = ss_totLA schl_MAcrct = ss_totMA ///
-						schl_RDcrct = ss_totRD schl_SCcrct = ss_totSC, ///
+		collapse (mean) schl_totLA = ss_totLA schl_totMA = ss_totMA ///
+						schl_totRD = ss_totRD schl_totSC = ss_totSC, ///
 						by(loc_${histyr2}${histyr1})
 					save data/prep/schl_crct, replace
 	restore

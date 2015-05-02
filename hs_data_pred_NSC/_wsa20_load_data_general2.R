@@ -2,7 +2,6 @@
 # Revising WSA work to incorporate NSC persistent enrollment as new outcome var
 #
 #   created on    2014.03.21 by James Appleton
-#   last updated  2015.04.13 by James Appleton
 
 #========================#
 # Setup/Load Packages ####
@@ -60,6 +59,13 @@ makeFootnote <- function(footnoteText =
   popViewport()
 }
 
+  # warning handling function
+  warning_handling <- function(code) {
+    
+    tryCatch(code,
+             warning = function(c) "warning")
+  }
+
 # set years for graduation data
 
 cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2013 doesn't have 4 semesters of time yet
@@ -108,6 +114,7 @@ maindir <- paste(path,
 dir ()
 
 # variables to keep
+
 keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA", 
             "ss_totRD", "ss_totSC", "mob_H1", "coreCumulGPA_H1", "lacourseCumulGPA_H1", 
             "macourseCumulGPA_H1", "fg_H1", "fsl_H1", "sei_all_H1", "startyear_grade_E", "loc_H1", 
@@ -116,24 +123,24 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "scfail_from8th_H1", "ssfail_from8th_H1", "corefail_from8th_H1", "gft_from8th_H1", 
             "retained_from04", "gft_H1", "gft_from8th_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
-            "schlAtt_H1", "schl_LAcrct", "schl_MAcrct", "schl_RDcrct", "schl_SCcrct", "spedCatMin_H1", 
-            "spedCatMod_H1", "spedCatSev_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
+            "schlAtt_H1", "schl_totLA", "schl_totMA", "schl_totRD", "schl_totSC", "spedCatMin_H1", 
+            "spedCatMod_H1", "spedCatSev_H1", "punex_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
-            "ss_totSCsq", "schl_LAcrctsq", "schl_MAcrctsq", "schl_RDcrctsq", "schl_fg", "schl_fsl",
-            "schl_sei_all", "schl_SCcrctsq")
+            "ss_totSCsq", "schl_fg", "schl_fsl",
+            "schl_sei_all", "target")
 
 evYr  <- "startyear_grade_E"
 zoned <- c("zoned_school_E", "zoned_school_name_E")
-
-g8 <-     ""
-g9 <-     c("la", "ma", "sc", "ss", "percCore", "percOth", 
-            "ap_ib_pass_H1", "ap_ib_pass_from8th_H1")
+g8 <-     zoned #add EOCT z-scores 
+g9 <-     c("la_credits", "ma_credits", "sc_credits", "ss_credits", "percCore", "percOth", 
+            "ap_ib_pass_H1", "ap_ib_pass_from8th_H1", g8, 
+			"z_9th", "z_ALG", "z_AME", "z_BIO", "z_ECO", "z_GEO", "z_MA1", "z_MA2", "z_PHY", "z_USH")
 g10 <-    c(g9, "psat_scoreCR", "psat_scoreMA", "psat_scoreWR", "psat_collReady", 
- 			"ap.t", "ib.t", "ps.t" )
+ 			"ap_ib_dual")
 
-g11 <-    c(g10, "psr")
+g11 <-    c(g10, "scoreMA", "scoreVE", "psr")
 
-g12 <-    c(g11, "p.e")
+g12 <-    g11
 
 factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1", 
              "loc_H1", "mafail_H1", "scfail_H1", "ssfail_H1", "corefail_H1", 
@@ -142,8 +149,8 @@ factors <- c("spedCatMin_H1", "spedCatMod_H1", "spedCatSev_H1", "lafail_H1",
              "gft_H1", "psr",
              "ap_ib_pass_from8th_H1", "gft_from8th_H1", "psat_collReady", 
              "retained_from04", "female", "black", "hispanic", "other", 
-             "frl_H1", "lep_H1", "repgrd_H1", "p.e",
-             "ap.t","ib.t","ps.t")
+             "frl_H1", "lep_H1", "repgrd_H1", "target",
+             "ap_ib_dual")
 
 disc <- c("dsevmx_H1", "dsevmn_H1", "drate_H1")
 
@@ -159,7 +166,7 @@ vplayout <- function(x, y)
 #==============================================================================
 # load post-secondary transition and persistence data
             e2 <- new.env()
-            ws <- "act_apib_gpa_sat_nsc.RData"
+            ws <- "NSC_outcome.RData"
             # convert needed .RData -> .rdb/.rdx
             e = local({load(paste0("S:/Superintendent/Private/Strategy & Performance", 
                                    "/ResearchEvaluation/Research Projects/", 
@@ -173,25 +180,20 @@ vplayout <- function(x, y)
   rm(e, e2)
   gc()
 
-for (p in 11:11) {
+for (p in 11:8) {
   
   #  for (yr in 2012:2013) {
   
   p.grd <- p # historic year grade
+
+
   
   # load and clean data
   df <- read.csv(paste0("..\\student.success.factor\\data\\prep\\", p.grd, "th", 
                         p.grd + 1, "th_model_only", ".csv"), sep=",", 
                  header = TRUE)
-  
-  # add polynomials
-  for(i in c(which(names(df) %in% c("ss_totLA", "ss_totMA", "ss_totRD", 
-                                    "ss_totSC", "schl_LAcrct", 
-                                    "schl_MAcrct", "schl_RDcrct", 
-                                    "schl_SCcrct")))) {
-    
-    df[[paste0(names(df)[i], "sq")]] <- (df[[i]])**2
-      }
+names(df)[which(names(df) %in% c("la", "ma", "sc", "ss"))] <- c("la_credits", "ma_credits", "sc_credits", "ss_credits")
+			
   if(p.grd >= 11) {
   #create post-secondary-ready indicator (psr)
          # SAT M and CR >= 520 OR
@@ -212,11 +214,21 @@ for (p in 11:11) {
   
     df$psr <- ifelse(df$psr == TRUE, 1, 0)
   }
+
   # use best prior predictors if exist and convert to evalyr equivalents
   # remove unchangeable things (e.g., PSAT)
+
+  # this allows us to run a single grade level without looping
+  if(!(exists("bal.f")) & p.grd < 12) {
+	bal.f <- read.csv(paste0("..\\student.success.factor\\data\\prep\\bal.f", p.grd, "th_", ps.m[p.grd + 1, 3], 
+		".csv"), header=TRUE, sep = ",")
+	go.coeffs <- as.numeric(unlist(read.table(paste0("..\\student.success.factor\\data\\prep\\go.coeffs", p.grd, "th_", ps.m[p.grd + 1, 3], 
+	".csv"), row.names = 1, sep = ",")))
+  }
+  # this portion is built for looping
   if (exists("bal.f")) {
     
-    bal.f.clr <- bal.f[(grep("dsev|drate|lacourse|macourse|pabs|fg|fsl|sei_all", 
+    bal.f.clr <- bal.f[(grep("dsev|drate|lacourse|macourse|pabs|punex|pex|fg|fsl|sei_all", 
                              names(bal.f)))] # keeping ones for which we hv E yr data
     
     
@@ -226,6 +238,33 @@ for (p in 11:11) {
 	bal.f.clr <- cbind(bal.f.clr, bal.f[,-(c(grep("H1", names(bal.f))))])
  		names(bal.f.clr)[-(grep("_E", names(bal.f.clr)))] <- 
 			names(bal.f)[-(grep("H1", names(bal.f)))]
+			
+if (p.grd == 11) {
+	df$target <- FALSE
+# ontime Grad (includes summers via ceiling function) AND
+
+pre.dim <- dim(df)[2]
+	
+for(i in 1:dim(bal.f.clr)[2]) {
+
+	if((go.coeffs[-1])[i] >= 0) {
+	df[,dim(df)[2] + 1] <- 
+	df$ontimeGrad == 1 & 
+				!is.na(df[, names(bal.f.clr)[i]]) & 
+				df[, names(bal.f.clr)[i]] >= round(bal.f.clr[,i], 2)
+	} else if ((go.coeffs[-1])[i] <= 0) {
+	df[,dim(df)[2] + 1] <- 
+	df$ontimeGrad == 1 &
+				!is.na(df[, names(bal.f.clr)[i]]) & 
+				df[, names(bal.f.clr)[i]] <= round(bal.f.clr[,i], 2)
+	}
+}
+
+#df1 <- df[, c(names(bal.f.clr), "ontimeGrad")]
+df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim) & df$ontimeGrad == 1
+	df <- df[,1:pre.dim]
+
+  } # END IF p.grd
     
   }
   
@@ -234,7 +273,7 @@ for (p in 11:11) {
       
       ind <- get(paste0("bal.ind.f.", z))
       
-      ind.clr <- ind[(grep("dsev|drate|lacourse|macourse|pabs", 
+      ind.clr <- ind[(grep("dsev|drate|lacourse|macourse|pabs|punex", 
                            names(ind)))] # keeping ones for which we hv E yr data
       
       
@@ -248,60 +287,7 @@ for (p in 11:11) {
     }
   }
   
-  if (p.grd == 11) {
-	#df$ontimeGrad <- NA
-# ontime Grad (includes summers via ceiling function) AND
-df[!is.na(df[, which(names(df)=="ontimeGrad")]) & 
-	df[, which(names(df) == "ontimeGrad")] == 1 &
-	
-#for(i in 1:dim(bal.f.clr)[2]) {
-df[!is.na(df[, names(bal.f.clr)[1]]) & 
-	df[, names(bal.f.clr)[1]] >= round(bal.f.clr[,1], 1) &
-df[!is.na(df[, names(bal.f.clr)[2]]) & 
-	df[, names(bal.f.clr)[2]] >= round(bal.f.clr[,2], 1) &
-df[!is.na(df[, names(bal.f.clr)[3]]) & 
-	df[, names(bal.f.clr)[3]] >= round(bal.f.clr[,3], 1), 
-	dim(df)[2]
-	
-	
-	
-	
-#}
-	
-	
 
-	# bal.f.clr best predictors are now outcomes
-	((!is.na(
-     
-    df[, which(names(bal.f.clr)[1]] >= round(bal.f.clr[,i], 1)],
-        dim(df)[2]] <- 1
-	
-
-	
-	
-	
-	
-	# SAT M and CR >= 520 OR
-    ((is.na(df[, which(names(df)=="scoreMA")]) & 
-        df[, which(names(df)=="scoreMA")] >= 520 & 
-        !is.na(df[, which(names(df)=="scoreVE")]) & 
-        df[, which(names(df)=="scoreVE")] >= 520) |
-       
-       # ACT E >= 18 and M and R >= 22 OR
-       (!is.na(df[, which(names(df)=="scoreaEN")]) & 
-          df[, which(names(df)=="scoreaEN")] >= 18 & 
-          !is.na(df[, which(names(df)=="scoreaMA")]) & 
-          df[, which(names(df)=="scoreaMA")] >= 22 & 
-          !is.na(df[, which(names(df)=="scoreaRD")]) & 
-          df[, which(names(df)=="scoreaRD")] >= 22) |
-       
-       # evaluated year 1st semester GPA >= 83
-       (!is.na(df[, which(names(df)=="lacourse1SemGPA_E")]) & 
-          df[, which(names(df)=="lacourse1SemGPA_E")] >= 83 & 
-          !is.na(df[, which(names(df)=="macourse1SemGPA_E")]) & 
-          df[, which(names(df)=="macourse1SemGPA_E")] >= 83))
-
-  } # END IF p.grd
 
 if (p.grd != 11 & p.grd != 12) {
   
@@ -374,10 +360,11 @@ if (p.grd != 11 & p.grd != 12) {
 } # END IF p.grd != 11 & p.grd != 12
 
 # keep only variables for modeling
-dfm <- df[, which(names(df) %in% c(keep, get(paste("g", p.grd, sep = ""))))]
+dfm <- df[, which(names(df) %in% c(keep, zoned,
+ 	get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
-names(df)[-which(names(df) %in% names(dfm))]
+names(df)[-(which(names(df) %in% names(dfm)))]
 
 # check all kids enrolled in E year
 stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
@@ -439,9 +426,6 @@ dual.agg.t$ps.t <- dual.agg.t$V4 >0
 dual.enr <- dual.agg.t[,c("id", "school_year", "cum_gpa", "ps.t"), with = FALSE]
 dual.enr <- data.frame(dual.enr)
 
-
-dfm <- merge(df, nsc.model, by = "id", all.x =  TRUE)
-
 apib <- merge(ap.agg, ib.agg, by = "id", all.x = TRUE, all.y = TRUE)
 
 dfm.m <- merge(dfm, apib, by = "id", all.x = TRUE)
@@ -449,16 +433,30 @@ dfm.m <- merge(dfm, apib, by = "id", all.x = TRUE)
 dfm <- merge(dfm.m, dual.enr, by = "id", all.x = TRUE)
 dfm <- data.frame(dfm)
 
+if(p.grd == 12) {
+	dfm <- merge(dfm, nsc.model, by = "id", all.x =  TRUE)
+	dfm$target <- dfm$p.e
+}
+if(length(dfm$ap.t)>0) dfm$ap.t[is.na(dfm$ap.t)] <- FALSE
+if(length(dfm$ib.t)>0) dfm$ib.t[is.na(dfm$ib.t)] <- FALSE
+if(length(dfm$ps.t)>0) dfm$ps.t[is.na(dfm$ps.t)] <- FALSE
+
+if(p.grd >= 10) {
+dfm$ap_ib_dual <- dfm$ap.t == TRUE | dfm$ib.t == TRUE | dfm$ps.t == TRUE
+}
+
+
+
 # keep only variables for modeling
-dfm <- dfm[, which(names(dfm) %in% c(keep, get(paste("g", p.grd, sep = ""))))]
+dfm <- dfm[, which(names(dfm) %in% c(keep, zoned, get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
 names(df)[-which(names(df) %in% names(dfm))]
 
-dfm$ap.t[is.na(dfm$ap.t)] <- FALSE
-dfm$ib.t[is.na(dfm$ib.t)] <- FALSE
-dfm$p.e[is.na(dfm$p.e)] <- FALSE
-dfm$ps.t[is.na(dfm$ps.t)] <- FALSE
+# assumes worst case if we don't know
+dfm$target[is.na(dfm$target)] <- FALSE
+	dfm$target <- ifelse(dfm$target == TRUE, 1, 0)
+
 
 #=====================================================================================#
 
@@ -481,20 +479,62 @@ if(p.grd > 9) {
       which(names(dfm) == "psat_scoreWR")] <- NA
 }
 
+
+
+# drop all variables with 60% or more missing data
+	rem <- dfm[ lapply( dfm, function(x) sum(is.na(x)) / length(x) ) > 0.60 ]
+	if(length(rem) > 0) {
+	rem2 <- lapply(names(rem), function(x) gsub("ss_", "schl_", x))
+	dfm <- dfm[, -(which(names(dfm) %in% c(names(rem), unlist(rem2))))]
+	}
+
+# add polynomials
+  for(i in c(which(names(dfm) %in% c("ss_totLA", "ss_totMA", "ss_totRD", 
+                                    "ss_totSC", "schl_totLA", 
+                                    "schl_totLA", "schl_totLA", 
+                                    "schl_totLA")))) {
+    
+    dfm[[paste0(names(dfm)[i], "sq")]] <- (dfm[[i]])**2
+      }
+
 # subset numeric variables for graphing
 nums <- names(dfm[complete.cases(dfm), sapply(dfm, function(x) class(x) %in% 
                              c("numeric", "integer", "logical") & 
                              sum(is.na(x))/length(x) < .34)])
 
+# check for imbalance in outcome variable and sample accordingly
+if(p.grd == 12) {
+	tbl <- table(df$target)
+	p.tbl <- prop.table(tbl)
+}
+if(p.grd != 12) {
+	# save percentage meeting target						
+	  sink(file = paste(maindir, "\\results\\perc.mtg.target_", p.grd, 
+		"th_", ps.m[p.grd + 1, 3], ".txt", sep = ""),
+		   append = FALSE, split = TRUE)
+	  tbl <- table(df$target)
+	  p.tbl <- prop.table(tbl)
+	  if(p.grd == 11) {cat("Students must be on-time (4-year) graduates.\n ")}
+      print(bal.f.clr)
+	  print(tbl)
+	  print(round(p.tbl*100, 1))
+	  sink()
+	# create percentage meeting target object
+		assign(paste0("perc.mtg.target_", p.grd, ps.m[p.grd + 1, 3]), tbl)
+}
 
-save.image(paste0(maindir, "/data/prep/wsa2pt0.RData"))
+
+
+save.image(paste0(maindir, "/data/prep/", p.grd, ps.m[p.grd + 1, 3], "wsa2pt0.RData"))
 
 
 if (sz < 1) {
 set.seed(721)
-red <- createDataPartition(dfm$p.e, p = sz, list = FALSE)
+red <- createDataPartition(dfm$target, p = sz, list = FALSE)
 dfm <- dfm[red,]
 }
+
+
 
 #=========
 # EXPLORE ####
@@ -519,79 +559,81 @@ corrplot(predCor,
 dev.off()
 
 # require(grid)
-# # examine univariate histograms; requires adjacent variables for looping
+ # examine univariate histograms; requires adjacent variables for looping
 # pdf(paste(maindir, "\\results\\graphs\\", p.grd, "th", ps.m[p.grd + 1, 2], 
-#           "_UnivHists.pdf", sep = ""), 
-#     width = 24, height = 18)
-# 
+#	"_UnivHists.pdf", sep = ""), width = 24, height = 18)
+ 
 # dfn <- dfm[, which(names(dfm) %in% nums[-which(nums %in% c("id", "loc_H1"))])]
-# 
-# # set variable range once by column #s or column names
+ 
+ # set variable range once by column #s or column names
 # start <-  1
 # vs <- dim(dfn)[2]
-# 
-# #         start <- which(names(df.n) == "dsevmx_H1")
-# #         vs <- which(names(df.n) == "coreCumulGPA_H1") - start + 2
-# 
+ 
+ #         start <- which(names(df.n) == "dsevmx_H1")
+ #         vs <- which(names(df.n) == "coreCumulGPA_H1") - start + 2
+ 
 # for(i in 1:(ceiling(vs/7))) {
 #   grid.newpage()
 #   pushViewport(viewport(layout = grid.layout(min(7, vs), 4)))
-#   
-#   # scales to matrix location of variables for graphing
+   
+   # scales to matrix location of variables for graphing
 #   range <- (min((i-1)*6+(start)):max((i-1)*6+(start + 5)))
 #   for(j in range) {
-#     
-#     # variable-specific removal of NAs
-#     d.h <- dfn[!is.na(dfn[, j]), ]
-#     
+     
+     # variable-specific removal of NAs
+#    d.h <- dfn[!is.na(dfn[, j]), ]
+     
 #     sd <- sd(d.h[, j])
-#     
+     
 #     bin <- min(ceiling(length(unique(d.h[, j]))/30), .2*sd)
 #     h2 <- ggplot(data = d.h, aes(d.h[, j]))
-#     h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$p.e,
+#     h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$target,
 #     h2 <- h2 + xlab(paste(names(d.h)[j], ": binwidth = ", 
 #                           round(2*bin, 2), sep = ""))
 #     h2
-#     
+     
 #     h1 <- ggplot(data = d.h, aes(d.h[, j]))
 #     h1 <- h1 + geom_histogram(binwidth = 1*bin) # colour = "white", 
 #     h1 <- h1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
 #                           round(1*bin, 2), sep = ""))
 #     h1 
-#     
+     
 #     h.5 <- ggplot(data = d.h, aes(d.h[, j]))
 #     h.5 <- h.5 + geom_histogram(binwidth = .5*bin) # colour = "white", 
 #     h.5 <- h.5 + xlab(paste(names(d.h)[j], ": binwidth = ", 
 #                             round(.5*bin, 2), sep = ""))
 #     h.5 
-#     
+     
 #     h.1 <- ggplot(data = d.h, aes(d.h[, j]))
 #     h.1 <- h.1 + geom_histogram(binwidth = .1*bin) # colour = "white", 
 #     h.1 <- h.1 + xlab(paste(names(d.h)[j], ": binwidth = ", 
 #                             round(.1*bin, 2), sep = ""))
 #     h.1 
-#     
-#     
-#     # + 2 scales graphs to 2nd row to lv room for title
+     
+     
+     # + 2 scales graphs to 2nd row to lv room for title
 #     k <- as.numeric((j - min(range) + 2))
-#     
+     
 #     print(h2, vp = vplayout(k, 1))
 #     print(h1, vp = vplayout(k, 2))
 #     print(h.5, vp = vplayout(k, 3))
 #     print(h.1, vp = vplayout(k, 4))
-#     
+     
 #   }
 #   grid.text(paste("WSA 2.0 SSI ", p.grd, "th-", ps.m[p.grd + 1, 3], 
 #                   " Predictor Distributions: ", 
 #                   "\n Shown with Varied Bin Widths \n Page: ", i, sep = ""), 
 #             vp = viewport(layout.pos.row = 1, layout.pos.col = 1:4, 
 #                           just = "centre"))
-#   
+   
 # }
-# 
-# 
-# 
+# )
+ 
+ 
 # dev.off()
+
+
+
 
 #=============================================
 # preProcess //center, scale, impute missing ####
@@ -599,18 +641,30 @@ dev.off()
 # later remember to preProcess w/ each cross-validation
 # questions - how apply cv preProcessing to set for scoring?
 
-set.seed(721)
-split <- createDataPartition(dfm$p.e, p = .7, list = FALSE)
 
-dfm$Class <- as.factor(ifelse(dfm$p.e == 1, "Yes", "No"))
+
+
+set.seed(721)
+split <- createDataPartition(dfm$target, p = .8, list = FALSE)
+
+dfm$Class <- as.factor(ifelse(dfm$target == 1, "Yes", "No"))
+#dfm <- dfm[,-(which(names(dfm) == "target"))]
 
 train <- dfm[ split, ]
 test  <- dfm[-split, ]
 
-predVars <- names(dfm)[!(names(dfm) %in% c("id",  "p.e",
+predVars <- names(dfm)[!(names(dfm) %in% c("id",  "target",
                                            "loc_H1", "Class", 
                                            "zoned_school_E", 
                                            "zoned_school_name_E"))]
+# #upsample
+#if (p.grd < 12 & mean(train$target) < .40) {
+#	upSampledTrain <- upSample( x = train[, predVars],
+#								y = train$Class,
+#								yname = "Class")
+#	train <- upSampledTrain
+#}
+
 
 if (p.grd == 12) {
   predVars <- predVars[!predVars == "startyear_grade_E"]
@@ -623,7 +677,7 @@ hist(apply(train[, predVars], 1, function(x) sum(is.na(x))))
 stopifnot(dim(train[, predVars])[2] - 
             max(apply(train[, predVars], 1, function(x) sum(is.na(x)))) > 0)
 
-trainX <-train[, predVars]
+trainX <- train[, predVars]
 
 
 # remove if complete cases subset has constant variables
@@ -656,7 +710,14 @@ training <- cbind(training, train[, -which(names(train) %in% names(training))])
 training80 <- cbind(training80, train[, -which(names(train) %in% names(training80))])
 trainFinal <- cbind(training[, c(predVars, "Class")])
 trainFinal80 <- cbind(training80[, c(predVars, "Class")])
-training80 <- complete.cases(training80)
+
+# #SMOTE upsample
+#if (p.grd < 12 & mean(ifelse(trainFinal$Class == "Yes", 1, 0)) < .40) {
+#require(DMwR)
+#set.seed(721)
+#	smoteTrain <- SMOTE(Class ~ ., data = trainFinal[, predVars])
+#	dim(smoteTrain)
+#}
 
 # save datasets for glm after the loops
 assign(paste0("trainFinal80.", p.grd, "th", ps.m[p.grd + 1, 3]), trainFinal80)
@@ -695,7 +756,7 @@ assign(paste0("trainFinal80.", p.grd, "th", ps.m[p.grd + 1, 3]), trainFinal80)
 #     
 #     bin <- min(ceiling(length(unique(d.h[, j]))/30), .2*sd)
 #     h2 <- ggplot(data = d.h, aes(d.h[, j]))
-#     h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$p.e,
+#     h2 <- h2 + geom_histogram(binwidth = 2*bin) #colour = df.n$target,
 #     h2 <- h2 + xlab(paste(names(d.h)[j], ": binwidth = ", 
 #                           round(2*bin, 2), sep = ""))
 #     h2
@@ -749,7 +810,7 @@ if(dim(trainX)[2] == dim(trainFinal)[2]) {
 testing <- predict(preProcValues1, testX[, -rmv])
 testing <- cbind(testing, test[, -which(names(test) %in% names(testing))])
 testFinal <- cbind(testing[, c(predVars, "Class")])
-testFinal$p.e <- ifelse(testFinal$Class == "Yes", 1, 0)
+testFinal$target <- ifelse(testFinal$Class == "Yes", 1, 0)
 
 # make nzv and nzv.corr datasets (all are cs)
 # subset numeric variables
@@ -782,9 +843,9 @@ train.nzv.corr <- train[train$spedCatSev_H1 == 0, names(nzv.corr)]
 train.nzv.corr <- cbind(train.nzv.corr, train[train$spedCatSev_H1 == 0, 
                                               which(names(train) == "Class")])
 
-# add p.e so all dataframes are the same
-nzv$p.e <- ifelse(nzv$Class == "Yes", 1, 0)
-nzv.corr$p.e <- ifelse(nzv.corr$Class == "Yes", 1, 0)
+# add target so all dataframes are the same
+nzv$target <- ifelse(nzv$Class == "Yes", 1, 0)
+nzv.corr$target <- ifelse(nzv.corr$Class == "Yes", 1, 0)
 
 #=============================================
 # model, tune, test ####
@@ -809,8 +870,8 @@ print(tuningPs)
 data <- cbind(unique(tuningPs[, 1]), 
               c("trainFinal", "nzv.corr", "nzv.corr", 
                 "trainFinal", "trainFinal"),
-              c("Class", rep("p.e", 4)),
-              c("p.e", rep("Class", 4)))
+              c("Class", rep("target", 4)),
+              c("target", rep("Class", 4)))
 
 
 #========================================
@@ -818,7 +879,7 @@ data <- cbind(unique(tuningPs[, 1]),
 #========================================
 library(kernlab)
 
-sigmaRange <- sigest(as.matrix(trainFinal[, -which(names(trainFinal) %in% c("Class", "p.e"))]))
+sigmaRange <- sigest(as.matrix(trainFinal[, -which(names(trainFinal) %in% c("Class", "target"))]))
 
 
 
@@ -846,7 +907,7 @@ ctrl <- trainControl(method = "cv",
                      allowParallel = TRUE,
                      summaryFunction = twoClassSummary)
 
-trainFinal$p.e <- factor(ifelse(trainFinal$Class == "Yes", 1, 0),
+trainFinal$target <- factor(ifelse(trainFinal$Class == "Yes", 1, 0),
                                 levels = c(0, 1),
                                 labels = c("No", "Yes"))
 
@@ -945,7 +1006,7 @@ for(i in 1:length(unique(tuningPsSet[, 1]))) {
   # Predicting New Samples and Confusion Matrices ####
   #===============================================
   tst <- testFinal[, which(names(testFinal) %in% names(get(data[i, 2])))]
-  tst <- tst[, names(tst)[-which(names(tst) == "p.e")]]
+  tst <- tst[, names(tst)[-which(names(tst) == "target")]]
   
   mPred <- predict(mFull, tst[, names(tst)[-which(names(tst) == "Class")]])
   
@@ -963,7 +1024,7 @@ for(i in 1:length(unique(tuningPsSet[, 1]))) {
   
   
   mProbs <- predict(mFull, 
-                    testFinal[, names(tst)[-which(names(tst) %in% c("p.e", 
+                    testFinal[, names(tst)[-which(names(tst) %in% c("target", 
                                                                     "Class"))]], 
                     type = "prob")
   head(mProbs, 3)
@@ -1121,8 +1182,8 @@ sink()
 
 # merge is based upon model and parameter
 
-# filter out if AUC < .90
-fs.models <- aucs[unique(tuningPsSet[, 1]) %in% aucs[aucs$V2 >= .75, 1], 1]
+# filter out if AUC < .79
+fs.models <- aucs[unique(tuningPsSet[, 1]) %in% aucs[aucs$V2 >= .79, 1], 1]
 #     fs.models <- fs.models[which(fs.models != "gbm")] # b/c gbm is self-selecting
 
 # make vector of only models w/ tuning parameters
@@ -1360,7 +1421,7 @@ if(max(lrRFE$results$ROC) >= .80) {
   int <- int[, -which(unlist(lapply(names(int), function(x) 
     grepl('fail|psat', x, ignore.case = TRUE))))]
   rm2 <- train[, which(unlist(lapply(names(train), function(x) 
-    grepl('schl_|_from|zoned|pct_|schlAtt_|schlEnr_|mob_H1|schlFRL|percentEnrolled|ss_', x, ignore.case = TRUE))))]
+    grepl('schl_|_from|zoned|pct_|schlAtt_|schlEnr_|mob_H1|schlFRL|percentEnrolled|ss_|fg_|fsl_|sei|la_credits|ma_credits|sc_credits|ss_credits', x, ignore.case = TRUE))))]
   
   glmData <- train[, -which(names(train) %in% c(names(int), names(rm2))), ]
   
@@ -1373,18 +1434,14 @@ if(max(lrRFE$results$ROC) >= .80) {
   
   # require at least 2 coefficients besides the intercept
   stopifnot((dim(glmCoeffs)[1] - 1) >= 2)
-  
-  
-  glmData <- as.data.frame(train.nzv.corr[, names(train.nzv.corr) %in% 
-                                            c(as.character(glmCoeffs[2:4, 1]), 
-                                              "Class")])
-  
-  glmData <- glmData[complete.cases(glmData), ]
 
+	myOrder <- c(as.character(glmCoeffs[2:4, 1]), "Class")
   
+  glmData <- as.data.frame(train.nzv.corr[, names(train.nzv.corr) %in% myOrder])
+                              
   
-  
-  
+  glmData <- glmData[complete.cases(glmData), myOrder]
+
   # model their relationship to the outcome
   
   ctrl <- trainControl(method = "cv",
@@ -1404,7 +1461,7 @@ if(max(lrRFE$results$ROC) >= .80) {
   rm(list=ls(pattern = "go1.coeffs"))
   counter.o <- NA
   warning_handling(
-    for (n in min(3, dim(glmData)[2] - 1):3) {
+    for (n in 3:(min(2, dim(glmData)[2] - 1))) {
       
       glm.out <- train(glmData[, 1:n],
                        glmData$Class, 
@@ -1414,7 +1471,7 @@ if(max(lrRFE$results$ROC) >= .80) {
                        trControl = ctrl)
       
       # confirm predictive characteristics bf use
-      stopifnot(round(glm.out$results$ROC, 1) >= .80)
+      stopifnot(round(glm.out$results$ROC, 2) >= .75)
       assign(paste0("glm.out.", n), glm.out)
       assign("counter.o", rbind(counter.o, n))
       
@@ -1462,9 +1519,15 @@ if(max(lrRFE$results$ROC) >= .80) {
   go.mxs <- apply(as.data.frame(glmData[complete.cases(glmData), 1:length(go.coeffs) - 1]), 2, function(x) 
     max(x, na.rm = TRUE))
 
+	# set any GPA variables to just 1.5 SD above mean
+		go.mxs[grepl("GPA", names(go.mxs))] <- go.mns[grepl("GPA", names(go.mns))] + 1.5*go.sds[grepl("GPA", names(go.sds))]
+
   go.mins <- apply(as.data.frame(glmData[complete.cases(glmData), 1:length(go.coeffs) - 1]), 2, function(x) 
     min(x, na.rm = TRUE))
-  
+
+	# set any percent absent variables to fixed value
+		go.mins[grepl("pabs", names(go.mins))] <- go.mns[grepl("pabs_", names(go.mns))] - 1*go.sds[grepl("pabs_", names(go.sds))]
+
   go.mn_min_SD <- go.mns - go.sds
 
 
@@ -1509,12 +1572,18 @@ if(max(lrRFE$results$ROC) >= .80) {
   
   names(bal)[c(1, dim(bal)[2])] <- c("intercept", "probability")
   
-  bal.f <- bal[bal$probability >= .67, ]
+if(p.grd == 12) {bal.f <- bal[bal$probability >= .60, ]}
+if(p.grd < 12) {bal.f <- bal[bal$probability >= .60, ]}
   bal.f <- bal.f[bal.f$probability == min(bal.f$probability), 
                  -(c(1, dim(bal.f)[2]))]
   
   assign(paste0("bal.f", p.grd, "th_", ps.m[p.grd + 1, 3]), bal.f)
+  write.table(bal.f, paste0("..\\student.success.factor\\data\\prep\\bal.f", p.grd-1, "th_", ps.m[p.grd, 3], ".csv"), 
+ 	sep = ",", col.names=TRUE, row.names=FALSE)
+  write.table(go.coeffs, paste0("..\\student.success.factor\\data\\prep\\go.coeffs", p.grd-1, "th_", ps.m[p.grd, 3], ".csv"), 
+ 	sep = ",", col.names=FALSE, row.names=TRUE)
 }
+
 
 
 # loop to find values for individual predictors (if models are sufficient)
@@ -1598,7 +1667,7 @@ sink()
 
 
 # make final dataset for scoring
-
+if (p.grd != 12) {
 final <- testing[, which(names(testing) %in% c("id", "loc_H1", 
                                                "zoned_school_E", 
                                                "zoned_school_name_E", 
@@ -1649,14 +1718,14 @@ names(final)[grep("as.numeric",
 
 # save copy of student scores
 write.csv(final, 
-          paste0(maindir, "\\results\\studentLevel_scoredProbs_", p.grd, "th_", ps.m[p.grd + 1, 3], 
+          paste0(maindir, "\\results\\stu_scoredProbs_", p.grd, "th_", ps.m[p.grd + 1, 3], 
                  ".csv"), 
           row.names = FALSE)
 
 final <- final[, -(grep("as.numeric|Yes", names(final)))]
 
 # aggregate by school
-if (p.grd != 12) {
+
 final$onPath <- ifelse(final$class == "Yes", 1, 0)
 final.schl <- ddply(final, c("zoned_school_E", "zoned_school_name_E"), 
                     summarise, 
