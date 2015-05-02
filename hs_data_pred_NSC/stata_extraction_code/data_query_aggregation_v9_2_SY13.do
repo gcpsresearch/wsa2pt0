@@ -1,7 +1,7 @@
 set more off, permanently
 log close _all
 clear all
-
+timer on 1
 /* updates
 2015.04.03	- added 12th predicting 13th (post-sec persist from NSC)
 
@@ -94,13 +94,13 @@ cd "${ssipath}"
 											* academic year; e.g., 3 in 14-15
 											* year sets grad year as 2015-3 = 2012
 	
-	global		nxtyr		"13"		// year beyond evaluated
-	global		evalyr		"12"		// evaluated year
-	global		histyr1		"11"		// historic year 1
-	global		histyr2		"10"		// historic year 2
-	global 		histyr3		"09"		// historic year 3
-	global		histyr4		"08"		// historic year 4
-	global		histyr5		"07"		// historic year 5
+	global		nxtyr		"14"		// year beyond evaluated
+	global		evalyr		"13"		// evaluated year
+	global		histyr1		"12"		// historic year 1
+	global		histyr2		"11"		// historic year 2
+	global 		histyr3		"10"		// historic year 3
+	global		histyr4		"09"		// historic year 4
+	global		histyr5		"08"		// historic year 5
 	
 * 	globals to control functions when wanting to not overwrite on re-runs
 	global		save		"save"
@@ -126,10 +126,10 @@ global gwyss	=	"20${evalyr}-04-27"		// 6) social studies gateway(LA and
 global sem1		=  90						// set length of first semester
 
 ****** Switches ****************************************************************
-	global		extract			"0"		// extracts separate tables from ODS; 
+	global		extract			"1"		// extracts separate tables from ODS; 
 										// everything is saved for future use 
 										// so set to "0"
-	global		calc			"0"
+	global		calc			"1"
 	global 		merge_all		"1"		// merges ODS-queried attendance, 
 										// behavioral, CRCT data for ms analyses
 	global		scoring			"0"
@@ -146,16 +146,17 @@ exit
 */
 
 if $extract==1	{
-log using code/logfiles/extract.smcl, replace
+log using code/logfiles/extract_20${evalyr}.smcl, replace
 
 **************************
 *gcps to state schl codes
 **************************
 	#delimit ;
 		odbc load, clear exec	("
-									SELECT distinct [LOC]
-										  ,[SCH_CODE]
-									  WHERE SCH_YR = 20${histyr1}
+									SELECT [SCHOOLNUM]
+										  ,[ALTNUMBER]
+									FROM [GSDR].[GEMS].[SASI_ASCH] 
+									WHERE [ALTNUMBER] != ''
 								")
 			dsn(ODS_Prod_RE) user(Research) pass(Research) ;
 	#delimit cr
@@ -164,7 +165,7 @@ log using code/logfiles/extract.smcl, replace
 			destring `var', replace
 			rename `var' `=lower("`var'")'
 		}			
-		rename (sch_code loc) (SchoolNumb loc_${histyr2}${histyr1})
+		rename (altnumber schoolnum) (SchoolNumb loc_${histyr2}${histyr1})
 		
 
 		
@@ -189,6 +190,7 @@ save data/prep/stateNum_to_gcpsNum_link, replace
 
 		destring grade, replace force
 		drop if grade == .
+		drop daysabsent daysenrolled
 	
 		foreach var of varlist* { 
 			rename `var' `var'_${histyr1}${evalyr}
@@ -197,8 +199,6 @@ save data/prep/stateNum_to_gcpsNum_link, replace
 		rename gcps_studentid id
 		isid id grade altschoolindicator repeatinggradeindicator
 		
-		* to check if daysenrolled and daysabsent are plausible values
-		assert daysenrolled- daysabsent>=0
 ${save} data/orig/evalyr_hs, replace
 	
 	#delimit ;
@@ -207,7 +207,7 @@ ${save} data/orig/evalyr_hs, replace
 				  ,[FAY_year]
 				  ,[zoned_school]
 				  ,[zoned_school_name]
-			FROM  [ResearchAndEvaluation].[dbo].[v_Student_Demography]
+			FROM  [ResearchAndEvaluation].[dbo].[v_Student_Demography2013]
 			WHERE school_year = 20${evalyr}
 								")
 		dsn(ODS_Prod_RE) user(Research) pass(Research) ;
@@ -227,6 +227,38 @@ ${save} data/orig/evalyr_hs, replace
 		
 	tempfile zoned1
 	save `zoned1', replace
+	
+* get absences (unexcused & excused)	
+	#delimit ;
+		odbc load, clear exec	("
+SELECT [SCHOOL_YEAR]
+      ,[PERMNUM]
+      ,[DAYS_ABS]
+      ,[DAYS_PRS]
+      ,[DAYS_UNEX]
+  FROM [GSDR].[GEMS].[SDRF_HIST]  
+ WHERE [SCHOOL_YEAR] =  20${evalyr}
+								")
+		dsn(ODS_Prod_RE) user(Research) pass(Research) ;
+	#delimit cr
+
+		foreach var of varlist* { 
+			destring `var', replace
+			rename `var' `=lower("`var'")'
+		}
+rename (permnum days_abs days_prs days_unex) ///
+(id daysabsent daysenrolled daysunexcused)
+
+collapse (sum) daysabsent daysenrolled daysunexcused, by(id)
+* to check if daysenrolled and daysabsent are plausible values
+assert daysenrolled >=0 & daysabsent>=0 & daysunexcused >=0
+	
+	foreach var of varlist* { 
+			rename `var' `var'_${histyr1}${evalyr}
+		}
+rename id_${histyr1}${evalyr} id
+${save} data/orig/absence_evalyr, replace
+
 
 **************************************************
 * historical year data 
@@ -278,7 +310,7 @@ ${save} data/orig/evalyr_hs, replace
 				  ,[STATUS]
 			  FROM [GSDR].[GEMS].[SASI_AENR]
 			  WHERE TRANSYEAR in (${histyr1} - 1) and
-					EFFDATE < 20${histyr1}0530 and
+					EFFDATE < 20${histyr1}0531 and
 					EFFDATE >= 20${histyr2}0801
 								")
 		dsn(ODS_Prod_MA) user(Research) pass(Research) ;
@@ -306,6 +338,7 @@ ${save} data/orig/evalyr_hs, replace
 			
 		* any day before 1 becomes 1 (only up to SQL query fiiltered range)
 		replace schoolday = 1 if dt < `first'
+		drop if schoolday ==.  
 		assert schoolday != .
 
 		gen entcd = trim(entercode)
@@ -551,16 +584,46 @@ ${save} data/prep/retgft04, replace
 		
 		destring grade, replace force
 		drop if grade == .
-		
+		drop daysabsent daysenrolled
+
 		foreach var of varlist* { 
 			rename `var' `var'_${histyr2}${histyr1}
 		}
 
 		rename gcps_studentid id
 		isid id grade altschoolindicator repeatinggradeindicator
-		assert daysenrolled- daysabsent>=0
 ${save} data/orig/histyr_hs, replace
+
+* get absences (unexcused & excused)	
+	#delimit ;
+		odbc load, clear exec	("
+SELECT [SCHOOL_YEAR]
+      ,[PERMNUM]
+      ,[DAYS_ABS]
+      ,[DAYS_PRS]
+      ,[DAYS_UNEX]
+  FROM [GSDR].[GEMS].[SDRF_HIST]  
+ WHERE [SCHOOL_YEAR] =  20${histyr1}
+								")
+		dsn(ODS_Prod_RE) user(Research) pass(Research) ;
+	#delimit cr
+
+		foreach var of varlist* { 
+			destring `var', replace
+			rename `var' `=lower("`var'")'
+		}
+rename (permnum days_abs days_prs days_unex) ///
+(id daysabsent daysenrolled daysunexcused)
+collapse (sum) daysabsent daysenrolled daysunexcused, by(id)
+* to check if daysenrolled and daysabsent are plausible values
+assert daysenrolled >=0 & daysabsent>=0 & daysunexcused >=0
 	
+	foreach var of varlist* { 
+			rename `var' `var'_${histyr2}${histyr1}
+		}
+rename id_${histyr2}${histyr1} id
+${save} data/orig/absence_histyr, replace
+
 ********************************************************************************
 * historic year mobility data - ODS - ratio is:
 *			(number of distinct school enrollments) / (number of enrolled days)
@@ -1145,10 +1208,10 @@ WHERE EXAM_ADMIN_DATE >= 20${histyr3}0801 and
 	
 	* bring in values from GA DOE
 preserve
-	foreach su in 9TH AMLIT BIO ECO MAI MAII PHY USH {
+	foreach su in 9TH AMLIT BIO ECON MAI MAII PHY USH {
 		import excel using /// 
-		"`crt_pth'\20${histyr2}\State with SD only\EOCT_SP10_`su'_State.xls", ///
-			sheet("EOCT_SP10_`su'_State") cellrange(B2:G3) firstrow clear
+		"`crt_pth'\20${histyr2}\EOCT_SP20${histyr2}_State_Summaries\SP${histyr2}_state_`su' with SD.xls", ///
+			sheet("SP${histyr2}_state_`su'") cellrange(B2:G3) firstrow clear
 				keep MeanScaleScore StandardDeviation
 				rename(MeanScaleScore StandardDeviation) ///
 					  (mn sd) 
@@ -1160,7 +1223,7 @@ preserve
 	use `eoct_9TH_ga_$histyr2', clear
 		append using `eoct_AMLIT_ga_$histyr2'
 		append using `eoct_BIO_ga_$histyr2'
-		append using `eoct_ECO_ga_$histyr2'
+		append using `eoct_ECON_ga_$histyr2'
 		append using `eoct_MAI_ga_$histyr2'
 		append using `eoct_MAII_ga_$histyr2'
 		append using `eoct_PHY_ga_$histyr2'
@@ -1185,8 +1248,8 @@ restore
 preserve
 	foreach su in 9TH AMLIT BIO ECON MAI MAII PHY USH {
 		import excel using /// 
-		"`crt_pth'\20${histyr1}\EOCT_SP20${histyr1}_State_Summaries\SP${histyr1}_state_`su' with SD.xls", ///
-			sheet("SP11_state_`su'") cellrange(A2:I3) firstrow clear
+		"`crt_pth'\20${histyr1}\SP${histyr1}_state_`su' with SD.xls", ///
+			sheet("SP${histyr1}_state_`su'") cellrange(A2:I3) firstrow clear
 				keep MeanScaleScore StandardDeviation
 				rename(MeanScaleScore StandardDeviation) ///
 					  (mn sd) 
@@ -1221,33 +1284,34 @@ restore
 		"Description\Original_DOE-CRCT-EOCT-HSGT_Mns-SDs"
 		* bring in values from GA DOE
 preserve
-	foreach su in 9TH AMLIT BIO ECON MAI MAII PHY USH ALG GEO {
+	foreach su in 9LIT AMLIT BIO ECO MTHI MTHII PHY USH CAL{
 		import excel using /// 
-		"`crt_pth'\20${evalyr}\SP${evalyr}_state_`su' with SD.xls", ///
-			sheet("SP12_state_`su'") cellrange(A2:I3) firstrow clear
-				keep MeanScaleScore StandardDeviation
-				rename(MeanScaleScore StandardDeviation) ///
+		"`crt_pth'\20${evalyr}\SP${evalyr}_state_`su'.xls", ///
+			sheet("SP${evalyr}_state_`su'") cellrange(A2:I3) firstrow clear
+				keep MeanScaleScore StDev
+				rename(MeanScaleScore StDev) ///
 					  (mn sd) 
 			gen subject = "`su'"
 			gen year = 20${evalyr}
 			tempfile eoct_`su'_ga_$evalyr
 			save `eoct_`su'_ga_$evalyr', replace
 		}
-	use `eoct_9TH_ga_$evalyr', clear
+	             use `eoct_9LIT_ga_$evalyr', clear
 		append using `eoct_AMLIT_ga_$evalyr'
 		append using `eoct_BIO_ga_$evalyr'
-		append using `eoct_ECON_ga_$evalyr'
-		append using `eoct_MAI_ga_$evalyr'
-		append using `eoct_MAII_ga_$evalyr'
+		append using `eoct_ECO_ga_$evalyr'
+		append using `eoct_MTHI_ga_$evalyr'
+		append using `eoct_MTHII_ga_$evalyr'
 		append using `eoct_PHY_ga_$evalyr'
 		append using `eoct_USH_ga_$evalyr'
-		append using `eoct_ALG_ga_$evalyr'
-		append using `eoct_GEO_ga_$evalyr'		
-		
-		replace subject = "MA1" if subject == "MAI"
-		replace subject = "MA2" if subject == "MAII"
+		append using `eoct_CAL_ga_$evalyr'		
+
+		replace subject = "9TH" if subject == "9LIT"
+		replace subject = "MA1" if subject == "MATHI"
+		replace subject = "MA2" if subject == "MATHII"
 		replace subject = "AME" if subject == "AMLIT"
 		replace subject = "ECO" if subject == "ECON"
+	
 	tempfile eoct_mean_sd_$evalyr
 	save `eoct_mean_sd_$evalyr', replace
 
@@ -1280,7 +1344,10 @@ keep id year subject ss_tot z
 rename (ss_tot z) (ss_ z_)
 reshape wide ss_ z_, i(id year) j(subject) string
 
-save data/prep/eoct${histyr2}${evalyr}, replace
+collapse (mean)ss_9TH z_9TH ss_ALG z_ALG ss_AME z_AME ss_BIO z_BIO ss_CAL z_CAL ///
+ ss_ECO z_ECO ss_GEO z_GEO ss_MA1 z_MA1 ss_MA2 z_MA2 ss_PHY z_PHY ss_USH z_USH, by(id)
+ 
+ save data/prep/eoct${histyr2}${evalyr}, replace
 
 **************************************************
 * ACT Assessment Results
@@ -1453,7 +1520,7 @@ log close
 
 if $calc==1 {
 
-log using code/logfiles/calc.smcl, replace
+log using code/logfiles/calc_20${evalyr}.smcl, replace
 
 ************************************
 * Historic year school-level values
@@ -1463,15 +1530,19 @@ log using code/logfiles/calc.smcl, replace
 * path to SARs data
 local p = "S:\Superintendent\Private\Strategy & Performance\ResearchEvaluation\RBES\" + ///
 			"School Accountability Rpts\Issued 20" + "${histyr1}" + "-" + "${evalyr}" + ///
-			" (For 20" + "${histyr2}" + "-" + "${histyr1}" + ")\Student\data_prep"
+			" (For 20" + "${histyr2}" + "-" + "${histyr1}" + ")\Student\data\prep"
 
 preserve
 
 	* school size, % white
 	use "`p'\FT002_20${histyr1}", clear
-		keep if SchoolYear == 20${histyr1}
+	keep if SchoolYear == 20${histyr1}
+	replace SchoolNumb = 1214 if SchoolNumb == 1212
+	replace SchoolNumb = 1114 if SchoolNumb == 107
+
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
-		assert loc != .
+	drop if loc == .
+		assert loc != . 
 		isid loc Grade Gender
 	collapse (sum) White TotalEnrollment, by(loc)
 		gen schl_percWht_H1 = White/TotalEnrollment
@@ -1480,10 +1551,13 @@ preserve
 	save data/prep/schl_enr, replace
 
 	* school %esol, %sped
-	
+
 	use "`p'\FT004_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
+		replace SchoolNumb = 1214 if SchoolNumb == 1212
+		replace SchoolNumb = 1114 if SchoolNumb == 107
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	drop if loc ==.
 		assert loc != .
 		isid loc Program Gender
 			keep if Program == "Special Education"
@@ -1492,10 +1566,13 @@ preserve
 		gen schl_percSPED_H1 = TotalEnrollment/schlEnr_H1
 		keep loc schl_percSPED_H1
 	save data/prep/schl_sped, replace	
-	
+
 	use "`p'\FT003_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
+		replace SchoolNumb = 1214 if SchoolNumb == 1212
+		replace SchoolNumb = 1114 if SchoolNumb == 107
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	drop if loc ==.
 		assert loc != .
 		isid loc Program Gender
 			keep if Program == "ESOL-Total"
@@ -1508,7 +1585,10 @@ preserve
 	* % FRPL
 	use "`p'\FRPL_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
+		replace SchoolNumb = 1214 if SchoolNumb == 1212
+		replace SchoolNumb = 1114 if SchoolNumb == 107
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	drop if loc ==.
 		assert loc != .
 		isid loc
 	rename PercentEligibleFreeOrReduced schlFRL_H1
@@ -1518,7 +1598,10 @@ preserve
 	* % enrolled days attended
 	use "`p'\ENR021_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
+		replace SchoolNumb = 1214 if SchoolNumb == 1212
+		replace SchoolNumb = 1114 if SchoolNumb == 107
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	drop if loc == .
 		assert loc != .
 		isid loc
 	rename AverageDailyAttendance schlAtt_H1
@@ -2096,7 +2179,7 @@ log close
 
 if $merge_all==1 {
 
-log using code/logfiles/merge_all.smcl, replace
+log using code/logfiles/merge_all_20${evalyr}.smcl, replace
 
 * MODEL DATASET
 ****************
@@ -2104,6 +2187,8 @@ log using code/logfiles/merge_all.smcl, replace
 use data/orig/histyr_hs, clear
 	drop ageseptember1st //need age Sept variable from evalyr (here 2011-12)
 	merge 1:1 id using data/orig/evalyr_hs, nogen keep(1 3)
+	merge 1:1 id using data/orig/absence_evalyr,nogen keep (1 3)
+	merge 1:1 id using data/orig/absence_histyr,nogen keep (1 3)
 	merge 1:1 id using data/prep/discipline_enroll_${histyr1}_metric_final_hs, nogen keep (1 3)
 	merge 1:1 id using data/prep/discipline_enroll_${evalyr}_metric_final_hs, nogen keep (1 3)
 	merge 1:1 id using data/prep/crct_final_hs, nogen keep (1 3)
@@ -2172,9 +2257,9 @@ use data/orig/histyr_hs, clear
 					"Traumatic Brain Injury")
 		
 						
-	save data/prep/hs_model, replace
+	save data/prep/hs_model_20${evalyr}, replace
 
-	use data/prep/hs_model, clear
+	use data/prep/hs_model_20${evalyr}, clear
 
 	tempfile modeling
 	save `modeling', replace
@@ -2219,6 +2304,10 @@ use data/orig/histyr_hs, clear
 			daysabsent_${histyr2}${histyr1}/daysenrolled_${histyr2}${histyr1}
 	gen pabs_${histyr1}${evalyr} = ///
 			daysabsent_${histyr1}${evalyr}/daysenrolled_${histyr1}${evalyr}
+	gen punex_${histyr2}${histyr1} = ///
+			daysunexcused_${histyr2}${histyr1}/daysenrolled_${histyr2}${histyr1}
+	gen punex_${histyr1}${evalyr} = ///
+			daysunexcused_${histyr1}${evalyr}/daysenrolled_${histyr1}${evalyr}
 	gen percentEnrolledDays_${histyr2}${histyr1} = ///
 			daysenrolled_${histyr2}${histyr1}/180
 	gen sped_${histyr2}${histyr1} = specialeducation != " "
@@ -2289,7 +2378,7 @@ use data/orig/histyr_hs, clear
 
 	if (`v' == 12) {				
 	preserve
-		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
+		outsheet using data/prep/`v'th`up'th_model_only_20${evalyr}.csv, c replace
 	restore
 	}
 		
@@ -2297,12 +2386,12 @@ use data/orig/histyr_hs, clear
 	preserve
 		drop if startyear_grade_E ==.
 		keep if scoreMA != . | scoreVE != . | scoreaEN != . | scoreaMA != . | scoreaRD !=.
-		outsheet using data/prep/ACT_SAT_GPA_equating.csv, c replace
+		outsheet using data/prep/ACT_SAT_GPA_equating_20${evalyr}.csv, c replace
 	restore
 
 	preserve
 		drop if startyear_grade_E ==. | fay_year_E != "Y"
-		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
+		outsheet using data/prep/`v'th`up'th_model_only_20${evalyr}.csv, c replace
 	restore
 
 	} 
@@ -2310,7 +2399,7 @@ use data/orig/histyr_hs, clear
 		
 		drop if startyear_grade_E ==. | startyear_grade_N == . | ///
 		fay_year_E != "Y"	//percentEnrolledDays_1011 < .65 ??regardless of how received them??
-		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
+		outsheet using data/prep/`v'th`up'th_model_only_20${evalyr}.csv, c replace
 
 	}
 
@@ -2319,7 +2408,9 @@ use data/orig/histyr_hs, clear
     }
   
  }
+timer off 1
 
+timer list 1
 	
 if $scoring==1 {
 * SCORED DATASET
