@@ -207,12 +207,12 @@ for (p in grds) {
   # load and clean data
 
 
-  df <- read.csv(paste0("..\\student.success.factor\\data\\prep\\", p.grd, "th", 
+  df <- read.csv(paste0("..\\student.success.factor\\data\\prep\\", p.grd, "th",
                         p.grd + 1, "th_model_only_",
- 						mod.m[mod.m[,1]==paste0(run) & mod.m[,2]==p, 3], ".csv"), sep=",", 
+                        mod.m[mod.m[,1]==paste0(run) & mod.m[,2]==p, 3], ".csv"), sep=",", 
                  header = TRUE)
-			
-if(p.grd==max(grds)) {run <- ps.m[p.grd + 1, 3]}		
+  
+  if(p.grd != max(grds)) {run <- ps.m[p.grd + 1, 3]}		
 			
   names(df)[which(names(df) %in% c("la", "ma", "sc", "ss"))] <- c("la_credits", "ma_credits", "sc_credits", "ss_credits")
 

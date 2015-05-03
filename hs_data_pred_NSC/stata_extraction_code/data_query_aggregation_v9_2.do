@@ -155,6 +155,7 @@ log using code/logfiles/extract.smcl, replace
 		odbc load, clear exec	("
 									SELECT distinct [LOC]
 										  ,[SCH_CODE]
+								FROM [GSDR].[GEMS].[SDR_SCHOOL_B]
 									  WHERE SCH_YR = 20${histyr1}
 								")
 			dsn(ODS_Prod_RE) user(Research) pass(Research) ;
@@ -1148,7 +1149,7 @@ WHERE EXAM_ADMIN_DATE >= 20${histyr3}0801 and
 		dsn(ODS_Prod_Assm) user(Research) pass(Research);
 	#delimit cr
 	
-	${outsheet} using data/orig/act${histyr4}${evalyr}.csv, c replace
+	${outsheet} using data/orig/eoct${histyr4}${evalyr}.csv, c replace
 
 	foreach var of varlist* { 
 		destring `var', replace
@@ -1203,13 +1204,12 @@ WHERE EXAM_ADMIN_DATE >= 20${histyr3}0801 and
 		* set path
 		local crt_pth = "${path}\RBES\" +  ///
 		"Description\Original_DOE-CRCT-EOCT-HSGT_Mns-SDs"
-	
-	* bring in values from GA DOE
+		* bring in values from GA DOE
 preserve
-	foreach su in 9TH AMLIT BIO ECO MAI MAII PHY USH {
+	foreach su in 9TH AMLIT BIO ECO MAI MAII PHY USH{
 		import excel using /// 
-		"`crt_pth'\20${histyr2}\State with SD only\EOCT_SP10_`su'_State.xls", ///
-			sheet("EOCT_SP10_`su'_State") cellrange(B2:G3) firstrow clear
+		"`crt_pth'\20${histyr2}\SP${histyr2}_state_`su'.xls", ///
+			sheet("EOCT_SP${histyr2}_`su'_State") cellrange(B2:G3) firstrow clear
 				keep MeanScaleScore StandardDeviation
 				rename(MeanScaleScore StandardDeviation) ///
 					  (mn sd) 
@@ -1218,7 +1218,7 @@ preserve
 			tempfile eoct_`su'_ga_$histyr2
 			save `eoct_`su'_ga_$histyr2', replace
 		}
-	use `eoct_9TH_ga_$histyr2', clear
+	             use `eoct_9TH_ga_$histyr2', clear
 		append using `eoct_AMLIT_ga_$histyr2'
 		append using `eoct_BIO_ga_$histyr2'
 		append using `eoct_ECO_ga_$histyr2'
@@ -1226,15 +1226,16 @@ preserve
 		append using `eoct_MAII_ga_$histyr2'
 		append using `eoct_PHY_ga_$histyr2'
 		append using `eoct_USH_ga_$histyr2'
-		
+
+		replace subject = "9TH" if subject == "9LIT"
 		replace subject = "MA1" if subject == "MAI"
 		replace subject = "MA2" if subject == "MAII"
 		replace subject = "AME" if subject == "AMLIT"
 		replace subject = "ECO" if subject == "ECON"
-
+	
 	tempfile eoct_mean_sd_$histyr2
 	save `eoct_mean_sd_$histyr2', replace
-	
+
 restore
 
 * historic year 1
@@ -1316,7 +1317,7 @@ restore
 
 preserve
 
-use `eoct_mean_sd_$evalyr', clear
+	     use `eoct_mean_sd_$evalyr', clear
 append using `eoct_mean_sd_$histyr1'
 append using `eoct_mean_sd_$histyr2'
 tempfile save eoct_mean_sd_final
@@ -1340,6 +1341,10 @@ restore
 keep id year subject ss_tot z
 rename (ss_tot z) (ss_ z_)
 reshape wide ss_ z_, i(id year) j(subject) string
+
+collapse (mean)ss_9TH z_9TH ss_ALG z_ALG ss_AME z_AME ss_BIO z_BIO  ///
+ ss_ECO z_ECO ss_GEO z_GEO ss_MA1 z_MA1 ss_MA2 z_MA2 ss_PHY z_PHY ss_USH z_USH, by(id)
+
 
 save data/prep/eoct${histyr2}${evalyr}, replace
 
@@ -1524,7 +1529,7 @@ log using code/logfiles/calc.smcl, replace
 * path to SARs data
 local p = "S:\Superintendent\Private\Strategy & Performance\ResearchEvaluation\RBES\" + ///
 			"School Accountability Rpts\Issued 20" + "${histyr1}" + "-" + "${evalyr}" + ///
-			" (For 20" + "${histyr2}" + "-" + "${histyr1}" + ")\Student\data_prep"
+			" (For 20" + "${histyr2}" + "-" + "${histyr1}" + ")\Student\data\prep"
 
 preserve
 
@@ -2374,10 +2379,15 @@ use data/orig/histyr_hs, clear
 
 	} 
 	else if (`v' < 11) {	
-		
+	preserve
+		drop if startyear_grade_E ==.
+		keep if scoreMA != . | scoreVE != . | scoreaEN != . | scoreaMA != . | scoreaRD !=.
+		outsheet using data/prep/ACT_SAT_GPA_equating_LT11th.csv, c replace
+	restore
 		drop if startyear_grade_E ==. | startyear_grade_N == . | ///
 		fay_year_E != "Y"	//percentEnrolledDays_1011 < .65 ??regardless of how received them??
 		outsheet using data/prep/`v'th`up'th_model_only.csv, c replace
+		
 
 	}
 
