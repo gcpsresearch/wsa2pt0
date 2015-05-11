@@ -1,6 +1,0 @@
-SELECT [SCHOOL_YEAR]
-      ,[PERMNUM]
-      ,[DAYS_ABS]
-      ,[DAYS_PRS]
-      ,[DAYS_UNEX]
-  FROM [GSDR].[GEMS].[SDRF_HIST]
