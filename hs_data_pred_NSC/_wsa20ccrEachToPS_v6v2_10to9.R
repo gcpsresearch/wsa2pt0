@@ -75,6 +75,25 @@ warning_handling <- function(code) {
 # set two grade levels for run
 grds <- 10:9
 
+# 
+
+# set years for graduation data
+#cohortYear_shrt <- c(2011, 2012, 2013) # b/c 2013 doesn't have 4 semesters of time yet
+
+#yrs <- length(cohortYear_shrt)  # number of years set below
+
+#startYear1       <- "2010-2011" 
+#startYear_shrt1  <- "2011"
+
+#startYear2       <- "2011-2012" # for 2012 grads
+#startYear_shrt2  <- "2012"
+
+#startYear3       <- "2012-2013" # for 2013 grads
+#startYear_shrt3  <- "2013"
+
+#startYear <- c(startYear1, startYear2, startYear3)
+#startYear_shrt <- c(startYear_shrt1, startYear_shrt2, startYear_shrt3)
+
 # set sample size and cross-validations 
 # proportion of sample to use
 sz      <- 1 # 1 = 100%
@@ -115,7 +134,7 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "retained_from04", "gft_H1", "gft_from8th_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
             "schlAtt_H1", "schl_totLA", "schl_totMA", "schl_totRD", "schl_totSC", "spedCatMin_H1", 
-            "spedCatMod_H1", "spedCatSev_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
+            "spedCatMod_H1", "spedCatSev_H1", "punex_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
             "ss_totSCsq", "schl_fg", "schl_fsl", "schl_sei_all", "schl_gini_index", "schl_sep_index", "target", 
 			"schl_totLAsq", "schl_totMAsq", "schl_totRDsq", "schl_totSCsq")
@@ -193,19 +212,6 @@ for (p in grds) {
                         p.grd + 1, "th_model_only_",
  						mod.m[mod.m[,1]==paste0(run) & mod.m[,2]==p, 3], ".csv"), sep=",", 
                  header = TRUE)
-			
-	df[complete.cases(df$pabs_H1) & df$pabs_H1 > 1, "pabs_H1"] <- NA
-	df[complete.cases(df$pabs_E) & df$pabs_E > 1, "pabs_E"] <- NA
-	df[complete.cases(df$punex_H1) & df$punex_H1 > 1, "punex_H1"] <- NA
-	df[complete.cases(df$punex_E) & df$punex_E > 1, "punex_E"] <- NA
-	
-# set NA for disciplinary incidents in evaluated year to 0
-disc2 <- c("dsevmx_E", "dsevmn_E", "drate_E")
-  df[, which(names(df) %in% disc2)][is.na(df[, which(names(df) %in% disc2)]) 
-                                     & df$daysenrolled_E > 0] <- 0
-  # convert from incidents per day to per 90 days
-  df[, which(names(df) %in% c("drate_E", "mob_E"))] <- 
-    df[, which(names(df) %in% c("drate_E", "mob_E"))]*90
 			
 if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}		
 			
@@ -317,9 +323,9 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       
     } # END IF p.grd == 11 p.grd < max(grds))
 	
-	 if (p.grd < 11 & p.grd >= 8 & p.grd < max(grds)) {
+	 if (p.grd < 11 & p.grd > 8 & p.grd < max(grds)) {
       df$target <- FALSE
-      # end of year grade is p.grd + 2
+      # end of year grade is p.grd + 1 AND
       
       pre.dim <- dim(df)[2]
       
@@ -328,19 +334,19 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
         #requires less than threshold for negative coeffs and more than for positive coeffs
         if((go.coeffs[-1])[i] >= 0) {
           df[,dim(df)[2] + 1] <- 
-            df$startyear_grade_N == p.grd + 2 & 
+            df$startyear_grade_N == p.grd + 1 & 
             !is.na(df[, names(bal.f.clr)[i]]) & 
             df[, names(bal.f.clr)[i]] >= round(bal.f.clr[,i], 2)
         } else if ((go.coeffs[-1])[i] <= 0) {
           df[,dim(df)[2] + 1] <- 
-            df$startyear_grade_N == p.grd + 2 & 
+            df$ontimeGrad == 1 &
             !is.na(df[, names(bal.f.clr)[i]]) & 
             df[, names(bal.f.clr)[i]] <= round(bal.f.clr[,i], 2)
         }
       }
       
       #df1 <- df[, c(names(bal.f.clr), "ontimeGrad")]
-      df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim) & df$startyear_grade_N == p.grd + 2
+      df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim) & df$startyear_grade_N == p.grd + 1
       df <- df[,1:pre.dim]
       
     } # END IF p.grd == 11 p.grd < max(grds))
@@ -389,7 +395,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
                                  ,t2.[CREDVALUE]
                                  FROM [GSDR].[GEMS].[SDRD_HIST] t1 LEFT JOIN [GSDR].[GEMS].[SASI_ACRS] t2 ON 
                                  t1.COURSE = t2.COURSE
-                                 WHERE t1.SCHOOL_YEAR <= ", as.numeric(mod.m[mod.m[,1]==paste0(gsub("th", "", run)) & mod.m[,2]==p, 3])-1, " and
+                                 WHERE t1.SCHOOL_YEAR <= ", as.numeric(mod.m[mod.m[,1]==paste0(run) & mod.m[,2]==p, 3])-1, " and
                                  t2.LONGTITLE LIKE 'PS %'
                                  "))
   odbcClose(ma_ch)
@@ -1396,8 +1402,6 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
     #=============================================
     
     if(max(lrRFE$results$ROC) >= .80) {
-		
-	Nvars <- 2*(length(lrRFE$results$ROC[lrRFE$results$ROC < .75]) + 1) - 1
       
       stopifnot(length(lrRFE$fit$coefficients[-1]) >= 1)
       
@@ -1408,7 +1412,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       # conduct the values needed for each of the three profiles:
       # balanced, slightly uneven, very uneven
       
-      # get least number of most predictive variables to achieve AUC of >= .67
+      # get 3 most predictive variables
       lrCoeffs <- as.data.frame(lrRFE$fit$coefficients)
       lrCoeffs <- cbind(row.names(lrCoeffs), lrCoeffs)
       row.names(lrCoeffs) <- NULL
@@ -1470,7 +1474,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
                            trControl = ctrl)
           
           # confirm predictive characteristics bf use
-          stopifnot(round(glm.out$results$ROC, 2) >= .67)
+          stopifnot(round(glm.out$results$ROC, 2) >= .75)
           assign(paste0("glm.out.", n), glm.out)
           assign("counter.o", rbind(counter.o, n))
           
@@ -1516,13 +1520,13 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
                         sd(x, na.rm = TRUE))
       
       go.mxs <- apply(as.data.frame(glmData[complete.cases(glmData), 1:length(go.coeffs) - 1]), 2, function(x) 
-        max(x, na.rm = TRUE))
+        quantile(x, .90, na.rm = TRUE))
       
       # set any GPA variables to just 1.5 SD above mean
       #go.mxs[grepl("GPA", names(go.mxs))] <- go.mns[grepl("GPA", names(go.mns))] + 1.5*go.sds[grepl("GPA", names(go.sds))]
       
       go.mins <- apply(as.data.frame(glmData[complete.cases(glmData), 1:length(go.coeffs) - 1]), 2, function(x) 
-        min(x, na.rm = TRUE))
+        quantile(x, .10, na.rm = TRUE))
       
       # set any percent absent variables to fixed value
       #go.mins[grepl("pabs|punex", names(go.mins))] <- go.mns[grepl("pabs_|punex_", names(go.mns))] - 1*go.sds[grepl("pabs_|punex_", names(go.sds))]
@@ -1536,8 +1540,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
 	  go.mins[grepl("lafail_H1|mafail_H1|scfail_H1|ssfail_H1|corefail_H1", names(go.mins))] <- 0
 	  go.mxs[grepl("lafail_H1|mafail_H1|scfail_H1|ssfail_H1|corefail_H1", names(go.mxs))] <- 0
 	
-		#go.match <- go.mxs - go.mins > .0001
-		
+		#go.match <- go.mxs - go.mins < .000001
 		#if(go.coeffs[-1][go.match] < 0) go.mns[go.match] <- go.mns[go.match] + go.sds[go.match]
 		#if(go.coeffs[-1][go.match] >= 0) go.mns[go.match] <- go.mns[go.match] - go.sds[go.match]
       
@@ -1570,13 +1573,10 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       
       go.mns.b <- mapply(incr, go.mns, go.sds, go.mxs, go.mins)
       
-      # set any dummy variables to best value and mins to 1 if less
+      # set any dummy variables to best value
       for (d in 1:3) {
         if (class(glmData[, d]) == "integer" & 
               max(glmData[, d], na.rm = TRUE) == 1)
-          go.mns.b[, d] <- 1
-		if (names(glmData)[d] == "dsevmn_H1" & 
-			min(glmData[, d], na.rm = TRUE) < 1)
           go.mns.b[, d] <- 1
         
       }
