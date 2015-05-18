@@ -61,7 +61,7 @@ makeFootnote <- function(footnoteText =
 yrs <- c(2013)
 
 # set date and time of most recent R workspace
-dtTime <- "_2015_05_02 15_09_02"
+dtTime <- "_2015_05_15 12_50_47"
 
 # set sample size and cross-validations 
 # proportion of sample to use
@@ -92,7 +92,7 @@ setwd (paste(path,
 #==============================================================================
 
 for (yr in yrs) {
-for (p in 11) {
+for (p in 9) {
   
   p.grd <- p # historic year grade
 
@@ -107,6 +107,7 @@ for (p in 11) {
     lapply(c("tuningPsSet", "fs.models", "keep", "evYr", "zoned", 
              "g8", "g9", "g10", "g11", "g12", "factors", "disc",
              "preProcValues1", "preProcValues2", "rmv", "trainX", "data", 
+			"mod.m", "run", "grds",
             paste0("gbm.tuned.", p.grd, "th", ps.m[p.grd + 1, 3]), 
             paste0("glm.tuned.", p.grd, "th", ps.m[p.grd + 1, 3]),
             paste0("lda.tuned.", p.grd, "th", ps.m[p.grd + 1, 3]),
@@ -136,23 +137,28 @@ for (p in 11) {
 
   
   # load and clean data
-<<<<<<< HEAD
+
   df <- read.csv(paste0("..\\student.success.factor\\data\\prep\\", p.grd, "th", 
                         p.grd + 1, "th_model_only_", yr, ".csv"), sep=",", 
                  header = TRUE)
 			
 	names(df)[which(names(df) %in% c("fg", "fsl", "sei_all"))] <- c("fg_H1", "fsl_H1", "sei_all_H1")
-  
-  
-  
-=======
-df <- read.csv(paste0("..\\student.success.factor\\data\\prep\\", p.grd, "th",
-                        p.grd + 1, "th_model_only_",
-                        mod.m[mod.m[,1]==paste0(run) & mod.m[,2]==p, 3], ".csv"), sep=",", 
-                 header = TRUE)
+	
+	df[complete.cases(df$pabs_H1) & df$pabs_H1 > 1, "pabs_H1"] <- NA
+	df[complete.cases(df$pabs_E) & df$pabs_E > 1, "pabs_E"] <- NA
+	df[complete.cases(df$punex_H1) & df$punex_H1 > 1, "punex_H1"] <- NA
+	df[complete.cases(df$punex_E) & df$punex_E > 1, "punex_E"] <- NA
+	
+# set NA for disciplinary incidents in evaluated year to 0
+disc2 <- c("dsevmx_E", "dsevmn_E", "drate_E")
+  df[, which(names(df) %in% disc2)][is.na(df[, which(names(df) %in% disc2)]) 
+                                     & df$daysenrolled_E > 0] <- 0
+  # convert from incidents per day to per 90 days
+  df[, which(names(df) %in% c("drate_E", "mob_E"))] <- 
+    df[, which(names(df) %in% c("drate_E", "mob_E"))]*90
   
 if(p.grd != max(grds)) {run <- ps.m[p.grd + 1, 3]}
->>>>>>> 541dce5455007a2eaf9cd6cf20e7d6922916689e
+
   
 names(df)[which(names(df) %in% c("la", "ma", "sc", "ss"))] <- c("la_credits", "ma_credits", "sc_credits", "ss_credits")
 			
@@ -182,7 +188,7 @@ names(df)[which(names(df) %in% c("la", "ma", "sc", "ss"))] <- c("la_credits", "m
 
   # this allows us to run a single grade level without looping
 	bal.f <- read.csv(paste0("..\\student.success.factor\\data\\prep\\bal.f", p.grd, "th_", ps.m[p.grd + 1, 2], 
-		".csv"), header=TRUE, sep = ",")
+		"th.csv"), header=TRUE, sep = ",")
 	go.coeffs <- as.numeric(unlist(read.table(paste0("..\\student.success.factor\\data\\prep\\go.coeffs", p.grd, "th_", ps.m[p.grd + 1, 3], 
 	".csv"), row.names = 1, sep = ",")))
   # this portion is built for looping
@@ -199,6 +205,7 @@ names(df)[which(names(df) %in% c("la", "ma", "sc", "ss"))] <- c("la_credits", "m
  		names(bal.f.clr)[-(grep("_E", names(bal.f.clr)))] <- 
 			names(bal.f)[-(grep("H1", names(bal.f)))]
 			
+ # create target variable
 if (p.grd == 11) {
 	df$target <- FALSE
 # ontime Grad (includes summers via ceiling function) AND
@@ -208,7 +215,7 @@ pre.dim <- dim(df)[2]
 for(i in 1:dim(bal.f.clr)[2]) {
 
 	if((go.coeffs[-1])[i] >= 0) {
-	df[,dim(df)[2] + 1] <- 
+	df[,dim(dfm)[2] + 1] <- 
 	df$ontimeGrad == 1 & 
 				!is.na(df[, names(bal.f.clr)[i]]) & 
 				df[, names(bal.f.clr)[i]] >= round(bal.f.clr[,i], 2)
@@ -225,19 +232,55 @@ df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim
 	df <- df[,1:pre.dim]
 
   } # END IF p.grd == 11
+
+if (p.grd < 11 & p.grd >= 8 & p.grd < max(grds)) {
+      df$target <- FALSE
+      # end of year grade is p.grd + 2
+      
+      pre.dim <- dim(df)[2]
+      
+      for(i in 1:dim(bal.f.clr)[2]) {
+        
+        #requires less than threshold for negative coeffs and more than for positive coeffs
+        if((go.coeffs[-1])[i] >= 0) {
+          df[,dim(df)[2] + 1] <- 
+            df$startyear_grade_N == p.grd + 2 & 
+            !is.na(df[, names(bal.f.clr)[i]]) & 
+            df[, names(bal.f.clr)[i]] >= round(bal.f.clr[,i], 2)
+        } else if ((go.coeffs[-1])[i] <= 0) {
+          df[,dim(df)[2] + 1] <- 
+            df$startyear_grade_N == p.grd + 2 & 
+            !is.na(df[, names(bal.f.clr)[i]]) & 
+            df[, names(bal.f.clr)[i]] <= round(bal.f.clr[,i], 2)
+        }
+      }
+      
+      #df1 <- df[, c(names(bal.f.clr), "ontimeGrad")]
+      df[, "target"] <- rowSums(df[, (pre.dim+1):dim(df)[2]]) == (dim(df)[2] - pre.dim) & df$startyear_grade_N == p.grd + 2
+      df <- df[,1:pre.dim]
+      
+    } # END IF p.grd < 11 & p.grd >= 8 & p.grd < max(grds))
     
   }
-  
-
+			
+			
 # keep only variables for modeling
-dfm <- df[, which(names(df) %in% c(keep, zoned,
+dfm <- df[, which(names(df) %in% c(keep, zoned,  
  	get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
 names(df)[-(which(names(df) %in% names(dfm)))]
 
 # check all kids enrolled in E year
-stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
+if (p.grd != 12) {
+  dfm <- df[df$daysenrolled_E > 0, which(names(df) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
+
+if (p.grd == 12) {
+  dfm <- df[, which(names(df) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
 
 # set NA for disciplinary incidents to 0
 dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -321,13 +364,15 @@ if(p.grd >= 10) {
 dfm$ap_ib_dual <- dfm$ap.t == TRUE | dfm$ib.t == TRUE | dfm$ps.t == TRUE
 }
 
-
-
 # keep only variables for modeling
 dfm <- dfm[, which(names(dfm) %in% c(keep, zoned, get(paste("g", p.grd, sep = ""))))]
 
 # check only removed intended variables
 names(df)[-which(names(df) %in% names(dfm))]
+
+
+
+
 
 # assumes worst case if we don't know
 dfm$target[is.na(dfm$target)] <- FALSE
@@ -337,7 +382,15 @@ dfm$target[is.na(dfm$target)] <- FALSE
 #=====================================================================================#
 
 # check all kids enrolled in E year
-stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
+if (p.grd != 12) {
+  dfm <- df[df$daysenrolled_E > 0, which(names(df) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
+
+if (p.grd == 12) {
+  dfm <- df[, which(names(df) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
 
 # set NA for disciplinary incidents to 0
 dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -763,7 +816,8 @@ frpl12 <- read.csv(paste0("..\\student.success.factor\\data\\orig\\",
 frpl12 <- frpl12[, c(1, 11)]
 
 final.mrg <- merge(final.schl, frpl12, by.x = "zoned_school_E", by.y = "loc_code", all.x = TRUE)
-
+		final.mrg <- final.mrg[final.mrg$zoned_school_E != 631, ]
+		
 assign(paste0("final.mrg", p.grd, "th_", ps.m[p.grd + 1, 3]), final.mrg)
 
 # plot %FRL & CCROTG %diff

@@ -115,7 +115,7 @@ keep <-   c("id", "dsevmx_H1", "dsevmn_H1", "drate_H1", "ss_totLA", "ss_totMA",
             "retained_from04", "gft_H1", "gft_from8th_H1", "sep_index_H1", "gini_index_H1",
             "schl_percSPED_H1", "schl_percESOL_H1", "schlEnr_H1", "schl_percWht_H1", "schlFRL_H1", 
             "schlAtt_H1", "schl_totLA", "schl_totMA", "schl_totRD", "schl_totSC", "spedCatMin_H1", 
-            "spedCatMod_H1", "spedCatSev_H1", "punex_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
+            "spedCatMod_H1", "spedCatSev_H1", "pabs_H1", "percentEnrolledDays_H1", "female", "black", 
             "hispanic", "other", "frl_H1", "lep_H1", "repgrd_H1", "ss_totLAsq", "ss_totMAsq", "ss_totRDsq", 
             "ss_totSCsq", "schl_fg", "schl_fsl", "schl_sei_all", "schl_gini_index", "schl_sep_index", "target", 
 			"schl_totLAsq", "schl_totMAsq", "schl_totRDsq", "schl_totSCsq")
@@ -348,14 +348,18 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
   }
   
   # keep only variables for modeling
+    # check all kids enrolled in E year
+if (p.grd != 12) {
+  dfm <- df[df$daysenrolled_E > 0, which(names(df) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
+
+if (p.grd == 12) {
   dfm <- df[, which(names(df) %in% c(keep, zoned,
                                      get(paste("g", p.grd, sep = ""))))]
-  
+  }
   # check only removed intended variables
   names(df)[-(which(names(df) %in% names(dfm)))]
-  
-  # check all kids enrolled in E year
-  stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
   
   # set NA for disciplinary incidents to 0
   dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -447,9 +451,6 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
   
   
   #=====================================================================================#
-  
-  # check all kids enrolled in E year
-  stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
   
   # set NA for disciplinary incidents to 0
   dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -1500,7 +1501,6 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       )
       
       # get coefficients to apply to means and SDs
-      glmData <- glmData[!is.na(glmData), ]
       go.coeffs <- glm.out$finalModel$coefficients 
       
       
@@ -1769,7 +1769,8 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       frpl12 <- frpl12[, c(1, 11)]
       
       final.mrg <- merge(final.schl, frpl12, by.x = "zoned_school_E", by.y = "loc_code", all.x = TRUE)
-      
+	  final.mrg <- final.mrg[final.mrg$zoned_school_E != 631, ]  
+	
       assign(paste0("final.mrg", p.grd, "th_", ps.m[p.grd + 1, 3]), final.mrg)
       
       # plot %FRL & CCROTG %diff

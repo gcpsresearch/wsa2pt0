@@ -348,8 +348,17 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
   }
   
   # keep only variables for modeling
-  dfm <- df[, which(names(df) %in% c(keep, zoned,
+      # check all kids enrolled in E year
+
+if (p.grd != 12) {
+  dfm <- dfm[dfm$daysenrolled_E > 0, which(names(dfm) %in% c(keep, zoned,
                                      get(paste("g", p.grd, sep = ""))))]
+  }
+
+if (p.grd == 12) {
+  dfm <- dfm[, which(names(dfm) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
   
   # check only removed intended variables
   names(df)[-(which(names(df) %in% names(dfm)))]
@@ -447,9 +456,6 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
   
   
   #=====================================================================================#
-  
-  # check all kids enrolled in E year
-  stopifnot(min(df$daysenrolled_E) > 0 | p.grd == 12)
   
   # set NA for disciplinary incidents to 0
   dfm[, which(names(dfm) %in% disc)][is.na(dfm[, which(names(dfm) %in% disc)]) 
@@ -1502,7 +1508,6 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       )
       
       # get coefficients to apply to means and SDs
-      glmData <- glmData[!is.na(glmData), ]
       go.coeffs <- glm.out$finalModel$coefficients 
       
       
@@ -1775,6 +1780,7 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       frpl12 <- frpl12[, c(1, 11)]
       
       final.mrg <- merge(final.schl, frpl12, by.x = "zoned_school_E", by.y = "loc_code", all.x = TRUE)
+		final.mrg <- final.mrg[final.mrg$zoned_school_E != 631, ]
       
       assign(paste0("final.mrg", p.grd, "th_", ps.m[p.grd + 1, 3]), final.mrg)
       

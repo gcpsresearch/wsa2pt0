@@ -367,8 +367,16 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
   }
   
   # keep only variables for modeling
+    # check all kids enrolled in E year
+if (p.grd != 12) {
+  dfm <- df[df$daysenrolled_E > 0, which(names(df) %in% c(keep, zoned,
+                                     get(paste("g", p.grd, sep = ""))))]
+  }
+
+if (p.grd == 12) {
   dfm <- df[, which(names(df) %in% c(keep, zoned,
                                      get(paste("g", p.grd, sep = ""))))]
+  }
   
   # check only removed intended variables
   names(df)[-(which(names(df) %in% names(dfm)))]
@@ -1519,7 +1527,6 @@ if(p.grd < max(grds)) {run <- ps.m[p.grd + 1, 3]}
       )
       
       # get coefficients to apply to means and SDs
-      glmData <- glmData[!is.na(glmData), ]
       go.coeffs <- glm.out$finalModel$coefficients 
       
       
