@@ -126,7 +126,7 @@ global gwyss	=	"20${evalyr}-04-27"		// 6) social studies gateway(LA and
 global sem1		=  90						// set length of first semester
 
 ****** Switches ****************************************************************
-	global		extract			"1"		// extracts separate tables from ODS; 
+	global		extract			"0"		// extracts separate tables from ODS; 
 										// everything is saved for future use 
 										// so set to "0"
 	global		calc			"0"
@@ -1084,12 +1084,12 @@ preserve
 	collapse (mean) schl_fg = fg schl_fsl = fsl schl_sei_all = sei_all, by(loc schoolyear)
 	reshape wide schl_* ,i(loc) j(schoolyear) string
 	rename loc loc_${histyr2}${histyr1}
-	save data/prep/schl_sei, replace
+	save  data/prep/20${evalyr}/schl_sei, replace
 restore
 	collapse (mean) fg fsl sei_all, by(id schoolyear)
 	reshape wide fg fsl sei_all ,i(id) j(schoolyear) string
 
-${save} data/prep/sei, replace
+${save}  data/prep/20${evalyr}/sei, replace
 
 
 

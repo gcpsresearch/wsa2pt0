@@ -1,7 +1,7 @@
 set more off, permanently
 log close _all
 clear all
-timer on 1
+
 /* updates
 2015.04.03	- added 12th predicting 13th (post-sec persist from NSC)
 
@@ -1070,9 +1070,9 @@ ${save} data/prep/20${evalyr}/yearstograd, replace
 				  ,[sei_all]
 			  FROM [Assessment].[dbo].[SEI]
 			  WHERE season = 'Spring' and
-					school_year in (20${histyr3}, 20${histyr2}, 20${histyr1}) or
+					school_year in (20${histyr3}, 20${histyr2}, 20${histyr1},20${evalyr}) or 
 					season = 'Fall' and school_year in (20${histyr4}, 20${histyr3}, 
-					20${histyr2})
+					20${histyr2}, 20${histyr1})
 							")
 		dsn(ODS_Prod_Assm) user(Research) pass(Research);
 	#delimit cr
@@ -1080,16 +1080,22 @@ ${save} data/prep/20${evalyr}/yearstograd, replace
 			destring `var', replace
 			rename `var' `=lower("`var'")'
 		}
-		rename student_id id
+	rename student_id id
+	gen schoolyear = "_E" 
+	replace schoolyear = "_H1" if (season =="Fall" & school_year < 20${histyr1} | ///
+	season == "Spring" & school_year < 20${evalyr})
 		
 preserve
-	collapse (mean) schl_fg = fg schl_fsl = fsl schl_sei_all = sei_all, by(loc)
+	collapse (mean) schl_fg = fg schl_fsl = fsl schl_sei_all = sei_all, by(loc schoolyear)
+	reshape wide schl_* ,i(loc) j(schoolyear) string
 	rename loc loc_${histyr2}${histyr1}
-	save data/prep/20${evalyr}/schl_sei, replace
+	save  data/prep/20${evalyr}/schl_sei, replace
 restore
-	collapse (mean) fg fsl sei_all, by(id)
+	collapse (mean) fg fsl sei_all, by(id schoolyear)
+	reshape wide fg fsl sei_all ,i(id) j(schoolyear) string
 
 ${save} data/prep/20${evalyr}/sei, replace
+
 
 
 
