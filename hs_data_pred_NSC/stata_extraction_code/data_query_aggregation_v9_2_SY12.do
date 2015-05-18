@@ -126,10 +126,10 @@ global gwyss	=	"20${evalyr}-04-27"		// 6) social studies gateway(LA and
 global sem1		=  90						// set length of first semester
 
 ****** Switches ****************************************************************
-	global		extract			"1"		// extracts separate tables from ODS; 
+	global		extract			"0"		// extracts separate tables from ODS; 
 										// everything is saved for future use 
 										// so set to "0"
-	global		calc			"1"
+	global		calc			"0"
 	global 		merge_all		"1"		// merges ODS-queried attendance, 
 										// behavioral, CRCT data for ms analyses
 	global		scoring			"0"
@@ -1064,9 +1064,9 @@ ${save} data/prep/yearstograd, replace
 				  ,[sei_all]
 			  FROM [Assessment].[dbo].[SEI]
 			  WHERE season = 'Spring' and
-					school_year in (20${histyr3}, 20${histyr2}, 20${histyr1}) or
+					school_year in (20${histyr3}, 20${histyr2}, 20${histyr1},20${evalyr}) or 
 					season = 'Fall' and school_year in (20${histyr4}, 20${histyr3}, 
-					20${histyr2})
+					20${histyr2}, 20${histyr1})
 							")
 		dsn(ODS_Prod_Assm) user(Research) pass(Research);
 	#delimit cr
@@ -1074,14 +1074,19 @@ ${save} data/prep/yearstograd, replace
 			destring `var', replace
 			rename `var' `=lower("`var'")'
 		}
-		rename student_id id
+	rename student_id id
+	gen schoolyear = "_E" 
+	replace schoolyear = "_H1" if (season =="Fall" & school_year < 20${histyr1} | ///
+	season == "Spring" & school_year < 20${evalyr})
 		
 preserve
-	collapse (mean) schl_fg = fg schl_fsl = fsl schl_sei_all = sei_all, by(loc)
+	collapse (mean) schl_fg = fg schl_fsl = fsl schl_sei_all = sei_all, by(loc schoolyear)
+	reshape wide schl_* ,i(loc) j(schoolyear) string
 	rename loc loc_${histyr2}${histyr1}
 	save data/prep/schl_sei, replace
 restore
-	collapse (mean) fg fsl sei_all, by(id)
+	collapse (mean) fg fsl sei_all, by(id schoolyear)
+	reshape wide fg fsl sei_all ,i(id) j(schoolyear) string
 
 ${save} data/prep/sei, replace
 
