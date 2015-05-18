@@ -126,7 +126,7 @@ global gwyss	=	"20${evalyr}-04-27"		// 6) social studies gateway(LA and
 global sem1		=  90						// set length of first semester
 
 ****** Switches ****************************************************************
-	global		extract			"0"		// extracts separate tables from ODS; 
+	global		extract			"1"		// extracts separate tables from ODS; 
 										// everything is saved for future use 
 										// so set to "0"
 	global		calc			"1"
@@ -1546,6 +1546,7 @@ preserve
 	use "`p'\FT002_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+	drop if loc == .
 		assert loc != .
 		isid loc Grade Gender
 	collapse (sum) White TotalEnrollment, by(loc)
@@ -1559,6 +1560,7 @@ preserve
 	use "`p'\FT004_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+		drop if loc == .
 		assert loc != .
 		isid loc Program Gender
 			keep if Program == "Special Education"
@@ -1571,6 +1573,7 @@ preserve
 	use "`p'\FT003_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+		drop if loc == .
 		assert loc != .
 		isid loc Program Gender
 			keep if Program == "ESOL-Total"
@@ -1584,6 +1587,7 @@ preserve
 	use "`p'\FRPL_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+		drop if loc == .
 		assert loc != .
 		duplicates drop loc, force
 		isid loc
@@ -1595,6 +1599,7 @@ preserve
 	use "`p'\ENR021_20${histyr1}", clear
 		keep if SchoolYear == 20${histyr1}
 	merge m:m SchoolNumb using "${ssipath}\data/prep/stateNum_to_gcpsNum_link", nogen keep(1 3)
+		drop if loc == .
 		assert loc != .
 		duplicates drop loc, force
 		isid loc
